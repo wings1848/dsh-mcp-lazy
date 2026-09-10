@@ -1,0 +1,82 @@
+name: Bug report
+description: Something behaves differently than documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: please check `docs/troubleshooting.md`, and run
+        `mcp({})` — the status output names each server's connection state and
+        the last error, which is usually the answer.
+
+  - type: input
+    id: version
+    attributes:
+      label: dsh-mcp-lazy version
+      description: The version in your profile's lockfile, or `npm ls dsh-mcp-lazy`.
+      placeholder: 0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: host
+    attributes:
+      label: DeepSeek Harness version
+      description: The version of the running harness, which supplies the peer packages.
+      placeholder: 0.1.5-rc.1
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      description: Output of `node --version`. The minimum is 22.18.0.
+      placeholder: v22.18.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant configuration
+      description: |
+        The `mcp-lazy` row from your `cordis.patch.yml`.
+        **Redact credentials.** Remove or replace anything in `headers` or `env`
+        before pasting — this is a public issue tracker.
+      render: yaml
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: |
+        Include the tool call you made and the response you got. If a server
+        failed to start, `mcp({})` carries the child's stderr tail — paste that,
+        it is usually the whole answer.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: |
+        The output of these, if you can run them:
+
+        ```
+        node scripts/measure-surface.mjs
+        ```
+      render: text
+    validations:
+      required: false

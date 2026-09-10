@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest a capability the plugin does not have
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please read the "Known limitations" section of the README first. Several
+        things are deliberate v1 boundaries rather than oversights: resources,
+        prompts, sampling, elicitation, OAuth, image forwarding, `.mcp.json`
+        interop, and SSE or unix-socket transports. A request that crosses one of
+        those lines is welcome, but say so — it is a different conversation than
+        a bug.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you unable to do today? Describe the situation, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+    validations:
+      required: false
+
+  - type: textarea
+    id: cost
+    attributes:
+      label: Does this move the model-facing tool surface?
+      description: |
+        The plugin's entire value is that the tool the model sees is one fixed
+        schema — currently 1525 bytes and 11 parameters, constant no matter how
+        many servers are configured. Any proposal that adds a model-visible tool
+        or parameter needs to argue why the constant cost is worth losing.
+        Run `node scripts/measure-surface.mjs` to see the current numbers.
+    validations:
+      required: false

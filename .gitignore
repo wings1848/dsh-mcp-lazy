@@ -29,3 +29,7 @@ coverage/
 
 # Local scratch: measurement runs write here when asked to
 .tmp/
+
+# CI unpacks the npm tarball here to check the published entry actually imports
+.dist-check/
+*.tgz

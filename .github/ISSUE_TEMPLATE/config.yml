@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/wings1848/dsh-mcp-lazy/security/advisories/new
+    about: Report privately. Do not open a public issue for a vulnerability.
+  - name: Troubleshooting guide
+    url: https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/troubleshooting.md
+    about: Failed servers, cold cache, and name resolution are covered here.

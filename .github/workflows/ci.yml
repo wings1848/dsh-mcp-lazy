@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# The default token is read/write on everything; this workflow only reads.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22.18.0 is the declared engines floor: the first release where Node
+        # strips TypeScript types by default and without an experimental warning.
+        # The test files rely on that, so the floor is exercised, not assumed.
+        node: ['22.18.0', '24.x', '26.x']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      # No DSH installation exists on a runner. scripts/link-dsh.mjs notices and
+      # leaves the registry copies of the peer packages in place, which is enough
+      # for the suite -- it never loads a real harness.
+      - run: pnpm test
+
+  dist:
+    name: dist is reproducible
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # `prepack` builds lib/. Publishing a stale or missing lib/ would ship a
+      # package that cannot be imported, so pack it and import it back.
+      - run: npm pack
+      - name: the packed tarball exposes the plugin contract
+        run: |
+          set -euo pipefail
+          # Unpack inside the checkout rather than /tmp: the @deepseek-ai/* peers
+          # are resolved by walking up from the importing file, and only the
+          # checkout has them installed.
+          rm -rf .dist-check && mkdir -p .dist-check
+          tar -xzf dsh-mcp-lazy-*.tgz -C .dist-check
+          node --input-type=module -e "
+            const plugin = await import('./.dist-check/package/lib/index.js')
+            const missing = ['name', 'inject', 'Config', 'apply'].filter(key => plugin[key] === undefined)
+            if (missing.length > 0) throw new Error('missing exports: ' + missing.join(', '))
+            if (typeof plugin.apply !== 'function') throw new Error('apply is not a function')
+            console.log('packed entry exports:', Object.keys(plugin).sort().join(', '))
+          "
+          rm -rf .dist-check
+
+  audit:
+    name: dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Fails on high and critical advisories only. The single runtime dependency
+      # is the MCP SDK, so a finding here is usually a transitive one worth
+      # knowing about rather than a reason to rewrite the plugin.
+      - run: pnpm audit --audit-level high

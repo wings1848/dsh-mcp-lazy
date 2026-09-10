@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub release
+      id-token: write # OIDC token, exchanged for a short-lived npm credential
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm test
+
+      - name: the tag must match package.json
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json version $pkg" >&2
+            exit 1
+          fi
+          echo "publishing $pkg"
+
+      # `npm publish` rather than `pnpm publish`: the npm CLI is the reference
+      # implementation for OIDC trusted publishing, and pnpm's support for it has
+      # been version-dependent. npm only packs and uploads here, so the pnpm
+      # workspace is not a problem. `prepack` builds lib/ first.
+      #
+      # No NODE_AUTH_TOKEN. Authentication comes from the OIDC exchange, which
+      # requires a trusted publisher to be configured for this package on
+      # npmjs.com (repository wings1848/dsh-mcp-lazy, workflow release.yml).
+      # See CONTRIBUTING.md.
+      - run: npm publish --provenance --access public
+        env:
+          NPM_CONFIG_PROVENANCE: 'true'
+
+      - name: create the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --generate-notes

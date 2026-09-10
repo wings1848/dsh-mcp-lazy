@@ -1,0 +1,33 @@
+version: 2
+
+updates:
+  # npm dependencies. The @deepseek-ai/* packages are intentionally pinned to
+  # exact versions in devDependencies -- the plugin is developed against the
+  # harness it runs on -- so they are ignored here. Bumping them is a deliberate
+  # act: change the pin and the peer range together, then re-run the suite.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'build'
+      include: scope
+    ignore:
+      - dependency-name: '@deepseek-ai/*'
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+
+  # Keep the workflow actions current. They are pinned to major tags, so this is
+  # how those majors get bumped.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: 'ci'
+      include: scope
