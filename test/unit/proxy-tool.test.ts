@@ -15,10 +15,10 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { delimiter, join } from 'node:path'
 import { after, before, describe, it } from 'node:test'
+import { tempDir } from '../helpers/tmp.ts'
 import { buildCacheEntry, metadataCachePath, saveMetadataCache, CACHE_VERSION } from '../../lib/metadata-cache.js'
 import { createProxyTool } from '../../lib/proxy-tool.js'
 import { McpGatewayRegistry, resolveServer } from '../../lib/registry.js'
@@ -99,11 +99,11 @@ async function run(args: Record<string, unknown>, registry: McpGatewayRegistry):
 }
 
 before(() => {
-  process.env['DSH_HOME'] = mkdtempSync(join(tmpdir(), 'dsh-mcp-lazy-proxy-'))
+  process.env['DSH_HOME'] = tempDir('dsh-mcp-lazy-proxy-')
 
   // A PATH containing only executables that always fail. Any spawn attempt
   // therefore surfaces as a rejected call instead of a silent success.
-  const trapDir = mkdtempSync(join(tmpdir(), 'dsh-mcp-lazy-trap-'))
+  const trapDir = tempDir('dsh-mcp-lazy-trap-')
   for (const name of ['demo-server', 'npx', 'node', 'bunx', 'sh', 'bash']) {
     const file = join(trapDir, name)
     writeFileSync(file, '#!/bin/sh\necho "SPAWN TRAP: a child process was started" >&2\nexit 97\n')

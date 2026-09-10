@@ -14,10 +14,10 @@
  */
 
 import assert from 'node:assert/strict'
-import { mkdtempSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+null
 import { join } from 'node:path'
 import { after, before, describe, it } from 'node:test'
+import { tempDir } from '../helpers/tmp.ts'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { DirectToolRegistrar, createNativeTool } from '../../lib/direct-tools.js'
 import { qualifiedToolName } from '../../lib/naming.js'
@@ -28,7 +28,7 @@ import type { Config, ServerEntry, ToolMetadata } from '../../lib/types.js'
 const originalHome = process.env['DSH_HOME']
 
 before(() => {
-  process.env['DSH_HOME'] = mkdtempSync(join(tmpdir(), 'dsh-mcp-lazy-direct-'))
+  process.env['DSH_HOME'] = tempDir('dsh-mcp-lazy-direct-')
 })
 
 after(() => {

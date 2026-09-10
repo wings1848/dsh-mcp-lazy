@@ -16,11 +16,15 @@
  * point of the comparison.
  */
 
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-process.env['DSH_HOME'] = mkdtempSync(join(tmpdir(), 'dsh-mcp-lazy-measure-'))
+// A throwaway DSH_HOME, removed on the way out so running the measurement does
+// not litter the system temp directory.
+const workHome = mkdtempSync(join(tmpdir(), 'dsh-mcp-lazy-measure-'))
+process.env['DSH_HOME'] = workHome
+process.on('exit', () => rmSync(workHome, { recursive: true, force: true }))
 
 const { createProxyTool } = await import('../lib/proxy-tool.js')
 const { McpGatewayRegistry } = await import('../lib/registry.js')

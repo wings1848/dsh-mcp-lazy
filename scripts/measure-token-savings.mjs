@@ -16,11 +16,16 @@
  *   node scripts/measure-token-savings.mjs --npx <pkg> [args]  # a real server
  *
  * Measured baseline (chrome-devtools-mcp@1.6.0, 29 tools):
- *   native registration  20730 bytes ≈ 5183 tokens
- *   this gateway          1525 bytes ≈  381 tokens   → 92.6% saved
+ *   native registration  21252 bytes ≈ 5313 tokens
+ *   this gateway          1525 bytes ≈  381 tokens   → 92.8% saved
+ *
+ * Note what the default fixture shows instead: with 7 small tools the native
+ * rendering is only 1552 bytes, so the saving is 1.7%. The gateway costs a
+ * fixed 1525 bytes, so it wins only when a server's rendered tool definitions
+ * exceed that. Small catalogs are close to break-even; large ones are not.
  */
 
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -30,7 +35,12 @@ import { z } from 'zod'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const fixture = join(here, '..', 'test', 'fixtures', 'mcp-server.mjs')
-process.env['DSH_HOME'] = mkdtempSync(join(tmpdir(), 'dsh-mcp-lazy-measure-'))
+
+// A throwaway DSH_HOME, removed on the way out so running the measurement does
+// not litter the system temp directory.
+const workHome = mkdtempSync(join(tmpdir(), 'dsh-mcp-lazy-measure-'))
+process.env['DSH_HOME'] = workHome
+process.on('exit', () => rmSync(workHome, { recursive: true, force: true }))
 
 const { createProxyTool } = await import('../lib/proxy-tool.js')
 const { McpGatewayRegistry } = await import('../lib/registry.js')

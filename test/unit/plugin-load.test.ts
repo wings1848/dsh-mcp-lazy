@@ -11,11 +11,11 @@
  */
 
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { readFileSync } from 'node:fs'
 import { after, before, describe, it } from 'node:test'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { tempDir } from '../helpers/tmp.ts'
 import { Config, apply, inject, name } from '../../lib/index.js'
 import { PROXY_TOOL_NAME } from '../../lib/schema.js'
 import type { Config as ConfigShape } from '../../lib/types.js'
@@ -25,7 +25,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 const originalHome = process.env['DSH_HOME']
 
 before(() => {
-  process.env['DSH_HOME'] = mkdtempSync(join(tmpdir(), 'dsh-mcp-lazy-load-'))
+  process.env['DSH_HOME'] = tempDir('dsh-mcp-lazy-load-')
 })
 
 after(() => {

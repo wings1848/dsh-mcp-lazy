@@ -3,10 +3,10 @@
  */
 
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, before, describe, it } from 'node:test'
+import { tempDir } from '../helpers/tmp.ts'
 import {
   buildCacheEntry,
   computeConfigHash,
@@ -21,7 +21,7 @@ import type { ServerEntry, ToolMetadata } from '../../lib/types.js'
 const originalHome = process.env['DSH_HOME']
 
 before(() => {
-  process.env['DSH_HOME'] = mkdtempSync(join(tmpdir(), 'dsh-mcp-lazy-cache-'))
+  process.env['DSH_HOME'] = tempDir('dsh-mcp-lazy-cache-')
 })
 
 after(() => {
