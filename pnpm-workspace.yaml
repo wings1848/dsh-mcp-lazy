@@ -1,0 +1,15 @@
+# pnpm 12 refuses to install anything published within the last 24 hours unless
+# it is listed here. That is a good default and a bad fit for this project.
+#
+# The @deepseek-ai/* packages are the harness this plugin integrates with. It is
+# published as a fast-moving prerelease, and the versions this plugin is
+# developed against are typically hours old. Without this exception `pnpm
+# install` fails outright on a fresh clone -- for every contributor, in CI,
+# everywhere -- until the pin happens to age past the window, and then fails
+# again the next time it moves.
+#
+# The scope is the whole extent of the exception. Everything else in the tree,
+# including every transitive dependency of the MCP SDK, is still subject to the
+# age check.
+minimumReleaseAgeExclude:
+  - '@deepseek-ai/*'

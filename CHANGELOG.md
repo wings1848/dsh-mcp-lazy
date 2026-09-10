@@ -121,6 +121,18 @@ and by tests that were observed to fail first — and fixed before this release:
   per suite, but it is now registered with `test/helpers/tmp.ts` and removed on
   process exit, including when an assertion fails. The two measurement scripts
   clean up after themselves the same way.
+- The repository could not be installed by anyone. pnpm 12 refuses to install a
+  package published within the last 24 hours, and the `@deepseek-ai/*` packages
+  this plugin is built against are typically hours old, so `pnpm install` failed
+  on a fresh clone — locally, in CI, everywhere — until the versions happened to
+  age past the window. The committed `pnpm-workspace.yaml` excludes that scope
+  from the age check and nothing else.
+- A first attempt at the same problem pinned the four direct `@deepseek-ai/*`
+  packages to exact versions, which made things worse rather than better: the
+  packages pinned, the peers *they* pull in — `dsh-agent`, `dsh-session`,
+  `dsh-llm`, and a dozen more — kept resolving to the newest prerelease, leaving
+  a lockfile that mixed `0.1.5-rc.1` and `0.1.5-rc.2` within one scope. The
+  harness itself is uniformly versioned and the lockfile now is too.
 
 - Cached tool lists went permanently stale when a filter was relaxed. The cache
   stored the post-filter tool list while the configuration hash deliberately

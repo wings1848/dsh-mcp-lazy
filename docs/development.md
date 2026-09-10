@@ -61,9 +61,18 @@ Node's own resolution — so it works for a global install and for a profile-loc
 If no DSH installation is found it prints a warning and exits **0**, so `pnpm test` still
 runs against the registry copies. That is what CI does, where no harness is installed.
 
-`package.json` pins the peer packages in `devDependencies` to the exact versions the plugin
-is developed against. The ranges in `peerDependencies` are wider on purpose: consumers may
-run a different harness release.
+**Do not pin `devDependencies` to the harness version.** Doing so looks like it buys
+consistency and actually costs it: the direct packages get pinned while the peers *they*
+depend on — `dsh-agent`, `dsh-session`, `dsh-llm`, and the rest, which pnpm installs
+automatically — keep resolving to the newest prerelease. The result is a lockfile that mixes
+two prereleases of the same scope, one of which is one release ahead of what actually runs.
+The harness itself is uniformly versioned; the lockfile should be too.
+
+So `devDependencies` carries ordinary ranges, and the committed `pnpm-workspace.yaml`
+excludes the `@deepseek-ai/*` scope from pnpm 12's 24-hour `minimumReleaseAge` rule —
+without that, a fresh clone cannot install at all, because a harness release is usually
+hours old. Neither of those is what makes a local checkout match the running harness;
+`link-dsh` is, and it runs on every test.
 
 ## Layout
 
