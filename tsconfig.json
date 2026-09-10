@@ -1,0 +1,37 @@
+{
+  // Deliberately has no `paths` / `baseUrl`. The `@deepseek-ai/*` peer packages
+  // are symlinked into node_modules/ by scripts/link-dsh.mjs, so ordinary Node
+  // resolution finds them — and Node's own test runner ignores tsconfig.json
+  // entirely, so a `paths` mapping would only ever hide a real resolution bug.
+  // Keeping this file free of absolute paths is what makes the repo buildable
+  // on a machine that is not the author's.
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rootDir": "src",
+    "outDir": "lib",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+
+    // Strictness. `noUncheckedIndexedAccess` is what keeps the tool-argument
+    // handling honest.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+
+    // Node executes the test files by stripping types, so it can only run
+    // syntax it can erase. This flag makes tsc reject the constructs Node
+    // would choke on (enum, namespace with runtime code, parameter properties)
+    // at compile time instead of at test time.
+    "erasableSyntaxOnly": true,
+
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"]
+}

@@ -1,0 +1,17 @@
+# dsh bundle patch: inserts the lazy MCP gateway into a profile's layer stack.
+#
+# The plugin registers exactly one model-facing tool (`mcp`) and owns the
+# connections to every server listed in this row's `servers:` config.
+#
+# Migration from @deepseek-ai/dsh-mcp-client: move each mcp-client row's config
+# into one entry of this plugin's `servers:` list and drop the per-row `id`.
+# `serverName` / `transport` / `command` / `args` / `env` / `cwd` / `url` /
+# `headers` / `toolCallTimeoutMs` keep their meaning; the lazy-specific fields
+# (`lifecycle`, `idleTimeout`, `directTools`, `includeTools`, `excludeTools`,
+# `searchKeywords`, `disabled`) are new.
+- insert:
+    - id: mcp-lazy
+      name: 'dsh-mcp-lazy'
+      config:
+        idleTimeout: 10
+        servers: []

@@ -1,0 +1,21 @@
+# Normalize line endings to LF in the repository, on every platform.
+* text=auto eol=lf
+
+# Windows scripts must keep CRLF if any are ever added.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets Git should never try to diff or merge as text.
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+
+# Lockfiles are generated; keep them out of diffs and merge stats to reduce
+# noise, but never mark them linguistically generated (that breaks tooling).
+pnpm-lock.yaml -diff linguist-generated
+
+# Collapse build output in GitHub's diff view.
+lib/** linguist-generated

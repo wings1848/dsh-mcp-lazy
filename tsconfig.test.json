@@ -1,0 +1,14 @@
+/**
+ * Type-checks the test sources, which import `.ts` specifiers directly so
+ * `node --test` can run them without a build step.
+ */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}
