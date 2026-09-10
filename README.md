@@ -3,8 +3,8 @@
 [![CI](https://github.com/wings1848/dsh-mcp-lazy/actions/workflows/ci.yml/badge.svg)](https://github.com/wings1848/dsh-mcp-lazy/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/dsh-mcp-lazy.svg)](https://www.npmjs.com/package/dsh-mcp-lazy)
 [![node](https://img.shields.io/node/v/dsh-mcp-lazy.svg)](https://nodejs.org)
-[![license](https://img.shields.io/npm/l/dsh-mcp-lazy.svg)](LICENSE)
-[![中文](https://img.shields.io/badge/文档-中文-blue.svg)](README-zh.md)
+[![license](https://img.shields.io/npm/l/dsh-mcp-lazy.svg)](https://github.com/wings1848/dsh-mcp-lazy/blob/main/LICENSE)
+[![中文](https://img.shields.io/badge/文档-中文-blue.svg)](https://github.com/wings1848/dsh-mcp-lazy/blob/main/README-zh.md)
 
 A lazy MCP gateway for [DeepSeek Harness](https://github.com/deepseek-ai). It puts **one**
 tool in front of the model instead of N MCP tool schemas: servers start on first use, idle
@@ -43,7 +43,7 @@ loss. Measure your own before assuming:
 
 ```bash
 pnpm run measure:savings                                          # local fixture
-node scripts/measure-token-savings.mjs --npx <your-server> --isolated
+node scripts/measure-token-savings.mjs --npx <your-server>
 ```
 
 ## Install
@@ -69,7 +69,7 @@ That installs the package into the profile and registers its bundle patch, which
         url: http://127.0.0.1:3000/mcp
 ```
 
-Restart the profile. Every field is documented in [docs/configuration.md](docs/configuration.md).
+Restart the profile. Every field is documented in [docs/configuration.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/configuration.md).
 
 Migrating from `@deepseek-ai/dsh-mcp-client`: move each row's `config` into one entry of
 `servers` and drop the per-row `id`. The transport fields keep their meaning.
@@ -92,11 +92,11 @@ mcp({})                                # status: tool count, connection state, c
 
 | | |
 | --- | --- |
-| [docs/configuration.md](docs/configuration.md) | every field, the four lifecycle modes, output ceiling |
-| [docs/troubleshooting.md](docs/troubleshooting.md) | failed servers, cold cache, name resolution |
-| [docs/development.md](docs/development.md) | build, test, why `link-dsh` is mandatory |
-| [docs/design/plan.md](docs/design/plan.md) | implementation plan and acceptance criteria |
-| [docs/design/parity-pi-mcp-adapter.md](docs/design/parity-pi-mcp-adapter.md) | module-by-module audit against `pi-mcp-adapter` v2.33.0 |
+| [docs/configuration.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/configuration.md) | every field, the four lifecycle modes, output ceiling |
+| [docs/troubleshooting.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/troubleshooting.md) | failed servers, cold cache, name resolution |
+| [docs/development.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/development.md) | build, test, why `link-dsh` is mandatory |
+| [docs/design/plan.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/plan.md) | implementation plan and acceptance criteria |
+| [docs/design/parity-pi-mcp-adapter.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/parity-pi-mcp-adapter.md) | module-by-module audit against `pi-mcp-adapter` v2.33.0 |
 
 ## Known limitations
 
@@ -122,15 +122,15 @@ The v1 boundary, stated plainly:
 
 ```bash
 pnpm install
-pnpm test          # builds, relinks the peer packages, runs 174 tests
+pnpm test          # builds, relinks the peer packages, runs 179 tests
 pnpm run check     # typecheck (sources and tests) then build
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/CONTRIBUTING.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE). The connection supervisor, transport factory, and
+MIT — see [LICENSE](https://github.com/wings1848/dsh-mcp-lazy/blob/main/LICENSE). The connection supervisor, transport factory, and
 environment-scrubbing rules derive from `@deepseek-ai/dsh-mcp-client`; the single-proxy-tool
 gateway, metadata cache, and weighted search ranking derive from `pi-mcp-adapter`. Both are
-MIT; their notices are reproduced in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+MIT; their notices are reproduced in [THIRD_PARTY_NOTICES.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/THIRD_PARTY_NOTICES.md).

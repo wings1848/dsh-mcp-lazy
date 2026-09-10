@@ -3,8 +3,8 @@
 [![CI](https://github.com/wings1848/dsh-mcp-lazy/actions/workflows/ci.yml/badge.svg)](https://github.com/wings1848/dsh-mcp-lazy/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/dsh-mcp-lazy.svg)](https://www.npmjs.com/package/dsh-mcp-lazy)
 [![node](https://img.shields.io/node/v/dsh-mcp-lazy.svg)](https://nodejs.org)
-[![license](https://img.shields.io/npm/l/dsh-mcp-lazy.svg)](LICENSE)
-[![English](https://img.shields.io/badge/docs-English-blue.svg)](README.md)
+[![license](https://img.shields.io/npm/l/dsh-mcp-lazy.svg)](https://github.com/wings1848/dsh-mcp-lazy/blob/main/LICENSE)
+[![English](https://img.shields.io/badge/docs-English-blue.svg)](https://github.com/wings1848/dsh-mcp-lazy/blob/main/README.md)
 
 一个给 [DeepSeek Harness](https://github.com/deepseek-ai) 用的**懒加载 MCP 网关**：模型面前只有
 **一个**工具，而不是 N 个 MCP 工具的 schema。服务器用到才启动、闲下来就回收，工具元数据落盘缓存
@@ -38,7 +38,7 @@
 
 ```bash
 pnpm run measure:savings                                          # 本地 fixture
-node scripts/measure-token-savings.mjs --npx <你的服务器> --isolated
+node scripts/measure-token-savings.mjs --npx <你的服务器>
 ```
 
 ## 安装
@@ -64,7 +64,7 @@ dsh plugin --profile <你的profile> add dsh-mcp-lazy
         url: http://127.0.0.1:3000/mcp
 ```
 
-重启 profile 即可。每个字段的说明见 [docs/configuration.md](docs/configuration.md)（英文）。
+重启 profile 即可。每个字段的说明见 [docs/configuration.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/configuration.md)（英文）。
 
 从 `@deepseek-ai/dsh-mcp-client` 迁移：把每行的 `config` 塞进 `servers` 数组的一个条目里，去掉各自的
 `id`。传输层字段含义完全一致。
@@ -87,11 +87,11 @@ mcp({})                                # 状态：工具数 / 连接态 / 缓存
 
 | | |
 | --- | --- |
-| [docs/configuration.md](docs/configuration.md) | 每个字段、四种生命周期、输出上限 |
-| [docs/troubleshooting.md](docs/troubleshooting.md) | 启动失败、冷缓存、名字解析 |
-| [docs/development.md](docs/development.md) | 构建、测试、为什么 `link-dsh` 是必须的 |
-| [docs/design/plan.md](docs/design/plan.md) | 实现计划与验收标准 |
-| [docs/design/parity-pi-mcp-adapter.md](docs/design/parity-pi-mcp-adapter.md) | 与 `pi-mcp-adapter` v2.33.0 的逐模块审计 |
+| [docs/configuration.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/configuration.md) | 每个字段、四种生命周期、输出上限 |
+| [docs/troubleshooting.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/troubleshooting.md) | 启动失败、冷缓存、名字解析 |
+| [docs/development.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/development.md) | 构建、测试、为什么 `link-dsh` 是必须的 |
+| [docs/design/plan.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/plan.md) | 实现计划与验收标准 |
+| [docs/design/parity-pi-mcp-adapter.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/parity-pi-mcp-adapter.md) | 与 `pi-mcp-adapter` v2.33.0 的逐模块审计 |
 
 > 详细文档目前只有英文版。这份中文 README 是入口页。
 
@@ -111,14 +111,14 @@ mcp({})                                # 状态：工具数 / 连接态 / 缓存
 
 ```bash
 pnpm install
-pnpm test          # 构建 → 重链 peer 包 → 178 个用例
+pnpm test          # 构建 → 重链 peer 包 → 179 个用例
 pnpm run check     # typecheck（含测试）→ build
 ```
 
-见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+见 [CONTRIBUTING.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/CONTRIBUTING.md)。
 
 ## 许可
 
-MIT，见 [LICENSE](LICENSE)。连接层与环境洗白规则改自 `@deepseek-ai/dsh-mcp-client`；单代理网关、
+MIT，见 [LICENSE](https://github.com/wings1848/dsh-mcp-lazy/blob/main/LICENSE)。连接层与环境洗白规则改自 `@deepseek-ai/dsh-mcp-client`；单代理网关、
 元数据缓存、加权搜索排名改自 `pi-mcp-adapter`。两者都是 MIT，声明重印在
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+[THIRD_PARTY_NOTICES.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/THIRD_PARTY_NOTICES.md)。

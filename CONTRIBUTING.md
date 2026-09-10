@@ -59,7 +59,7 @@ All of these come from `package.json` `scripts`.
 | --- | --- |
 | `pnpm build` | `tsc -p tsconfig.json` — compiles `src/` to `lib/` with declarations and source maps. |
 | `pnpm typecheck` | The same project with `--noEmit` — type errors only, no output. |
-| `pnpm test` | `node --test "test/unit/*.test.ts"`. Runs `pretest` first (build, then `link-dsh`). 174 tests in 46 suites (`README.md`, `docs/design/parity-pi-mcp-adapter.md`). |
+| `pnpm test` | `node --test "test/unit/*.test.ts"`. Runs `pretest` first (build, then `link-dsh`). 179 tests in 47 suites (`README.md`, `docs/design/parity-pi-mcp-adapter.md`). |
 | `pnpm test:types` | `tsc -p tsconfig.test.json` — type-checks the test sources as well, which `typecheck` does not cover. |
 | `pnpm check` | `typecheck` then `test:types` then `build`. Run this before opening a pull request. |
 | `pnpm link-dsh` | `node scripts/link-dsh.mjs` — symlinks the four peer packages from the running DSH installation into `node_modules`. |
@@ -98,7 +98,7 @@ formatter is configured in this repository.
 - They import the **built output**, for example
   `import { OutputGuard } from '../../lib/output-guard.js'` — never from `src/`.
   `lib/` is gitignored, so build before running a single file directly:
-  `pnpm build && node --test test/unit/output-guard.test.ts`. (`pnpm test` covers
+  `pnpm run build && node --test test/unit/output-guard.test.ts`. (`pnpm test` covers
   this, because `pretest` builds.)
 - A bug fix comes with a regression test that was observed to fail before the fix.
   Run the new test against the unpatched code and keep the failing output; that

@@ -25,7 +25,7 @@
  * exceed that. Small catalogs are close to break-even; large ones are not.
  */
 
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -78,6 +78,21 @@ async function catalogOf(serverName) {
 const npxIndex = process.argv.indexOf('--npx')
 const native = []
 let serverCount = 1
+
+// The fixture lives under test/, which is not part of the published tarball. A
+// copy installed from npm therefore has the script but not its fallback server,
+// and the failure mode without this check is an opaque "Connection closed" from
+// deep inside the SDK.
+if (npxIndex === -1 && !existsSync(fixture)) {
+  console.error(
+    'measure: no server was given and the development fixture is not present.\n' +
+      'It lives at test/fixtures/mcp-server.mjs, which is not shipped in the npm\n' +
+      'package. Point the script at a real server instead:\n' +
+      '\n' +
+      '  node scripts/measure-token-savings.mjs --npx <package> [args...]\n',
+  )
+  process.exit(2)
+}
 
 if (npxIndex !== -1) {
   // Measure a real published server over npx, which is how it would actually be

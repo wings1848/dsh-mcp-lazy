@@ -78,7 +78,7 @@ peer dependencies supplied by the DSH host (`package.json`).
   running DSH installation, `scripts/measure-surface.mjs` prints the constant
   per-request cost, and `scripts/measure-token-savings.mjs` measures the saving
   against a real server.
-- 178 automated tests in 47 suites, including real child-process tests for lazy
+- 179 automated tests in 47 suites, including real child-process tests for lazy
   startup, process reuse, idle reaping, cancellation, timeouts, crash recovery,
   and live tool-list refresh (`README.md`,
   `docs/design/parity-pi-mcp-adapter.md`).
@@ -94,8 +94,33 @@ peer dependencies supplied by the DSH host (`package.json`).
 
 Defects found during development — by the parity audit in
 `docs/design/parity-pi-mcp-adapter.md`, by mounting the plugin in a real harness,
-and by tests that were observed to fail first — and fixed before this release:
+by an independent review before this release, and by tests that were observed to
+fail first — and fixed before this release:
 
+- A server that completed the MCP handshake but then failed `tools/list` leaked
+  its child process, permanently. `connect()` only closed the client on the happy
+  path, so a failure between "the server is up" and "the catalog was read" left a
+  running child that was never entered into the connection state map — which made
+  it unreachable by the idle sweep, by `disconnect`, and by `dispose`, the three
+  mechanisms whose entire job is to end it. Every retry leaked another one. The
+  failure path now closes whatever it opened. Found by review, not by the suite:
+  the existing failure fixture exits before the handshake, which the SDK cleans up
+  on its own, so no test covered the window at all (`src/connection.ts`).
+- `apply()` discarded the disposer returned by `ctx.tools.register()`, so the
+  `mcp` tool was never unregistered on teardown. That disposer is not
+  fiber-scoped — the harness's own mcp-client keeps and calls the ones it gets —
+  so an unload-and-reload would leave a stale tool pointing at a registry whose
+  connection layer had already been disposed. The `apply` disposer also now
+  awaits the registry and output-guard teardown instead of firing and forgetting
+  it, since cordis waits for an async disposer and returning early let a reload
+  race its predecessor (`src/index.ts`).
+- The test that claimed to cover that could not fail. Its fake context cleared
+  the registered-tool list inside its own `disposeAll()`, so "no tool may outlive
+  the plugin scope" passed no matter what the plugin did — the exact
+  decoration-instead-of-regression failure `CONTRIBUTING.md` warns about. The fake
+  now returns a real unregister function and leaves the list alone, and the
+  assertion was confirmed to go red when the plugin-level fix is reverted
+  (`test/unit/plugin-load.test.ts`).
 - `eager` and `keep-alive` never connected during activation, so both behaved
   exactly like their lazy counterparts: a documented setting that silently did
   nothing. Nothing in `apply()` or the registry ever acted on the "connect during
@@ -133,7 +158,6 @@ and by tests that were observed to fail first — and fixed before this release:
   `dsh-llm`, and a dozen more — kept resolving to the newest prerelease, leaving
   a lockfile that mixed `0.1.5-rc.1` and `0.1.5-rc.2` within one scope. The
   harness itself is uniformly versioned and the lockfile now is too.
-
 - Cached tool lists went permanently stale when a filter was relaxed. The cache
   stored the post-filter tool list while the configuration hash deliberately
   ignored `includeTools`/`excludeTools`, so removing an exclusion could not bring
@@ -160,7 +184,9 @@ and by tests that were observed to fail first — and fixed before this release:
   `srv__read_dir`, because matching was done against the full name only
   (`src/naming.ts`).
 - `connect` against a disabled server threw, so the model saw a failed tool
-  instead of a readable diagnostic (`src/registry.ts`).
+  instead of a readable diagnostic. `ensureConnected` still refuses to start a
+  disabled server — the fix is that the proxy tool now catches that refusal and
+  renders it as an explanation (`src/proxy-tool.ts`, `src/registry.ts`).
 - The idle sweep read the cached window instead of resolving it, which made every
   server look like "never reap" (`src/connection.ts`).
 - A tool call required the catalog to exist already, so the first call against a

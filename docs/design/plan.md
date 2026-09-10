@@ -3,7 +3,8 @@
 > 目标：给 DSH 做一个「pi-mcp-adapter 式」的 MCP 插件：**一个恒定代理工具 + 服务器懒启动 + 元数据缓存**，
 > 基于 `@deepseek-ai/dsh-mcp-client` 魔改，token 与内存成本都从「启动即全量」变成「用到才付」。
 >
-> 状态：**讨论阶段**（尚未写代码）。参照物：`/home/wings/Code_Project/pi-mcp-adapter` @ `32b67f9` (v2.33.0)。
+> 状态：**已完成**（v0.1.0）。本文件是开发期写下的计划与验收标准，保留作设计记录；
+> 与代码不一致时以代码为准。参照物：`pi-mcp-adapter` @ `32b67f9` (v2.33.0)。
 
 ---
 
@@ -20,7 +21,7 @@ DSH 官方 `@deepseek-ai/dsh-mcp-client` (0.1.5-rc.1) 的实测行为：
 | 释放条件 | 仅 HMR/重载，或重连预算耗尽（默认连续 10 次失败） | README「Startup, updates, and reconnection」 |
 | 懒加载 | **不存在**：无 lazy/defer/on-demand 概念，`ToolDefinition` 无可见性开关 | bundle grep + `dsh-tools/lib/types/index.d.ts` |
 
-pi-mcp-adapter 的对照做法（`/home/wings/Code_Project/pi-mcp-adapter`）：
+pi-mcp-adapter 的对照做法：
 
 - **恒定单代理工具** `mcp`（`index.ts:1380` `registerProxyTool`）：`search` / `describe` / `instructions` / `connect` / `tool`+`args` / `action`(install, auth) / `server` 消歧 / `limit`+`offset` 分页。
 - **元数据磁盘缓存**（`metadata-cache.ts`）：`mcp-cache.json`，`CACHE_VERSION=1`、`CACHE_MAX_AGE_MS=7d`、按 `computeServerHash(definition)` 判有效；`search`/`describe` 因此**不需要活连接**。
@@ -69,14 +70,19 @@ pi-mcp-adapter 的对照做法（`/home/wings/Code_Project/pi-mcp-adapter`）：
   （`serverName` / `transport` / `command` / `args` / `env` / `cwd` / `url` / `headers` / `toolCallTimeoutMs`），
   现有配置可直接搬过来。**不**引入 `.mcp.json` 兼容层（留作 v2）。
 
-### D3 — 生命周期与回收 ✅（照 pi 原样）
+### D3 — 生命周期与回收 ✅
 - `lifecycle`：`lazy`（默认）/ `eager` / `keep-alive` / `lazy-keep-alive`。
-- `idleTimeout`：**默认 10 分钟，`0` 表示禁用回收**（`types.ts:461,589`；`index.ts:289`）。
-- 派生规则（照 pi 的 `index.ts:287-291`）：
-  `persistsAfterFirstSpawn = (lifecycle === 'eager' || lifecycle === 'lazy-keep-alive')`；
-  `idleOverride = definition.idleTimeout ?? (persistsAfterFirstSpawn ? 0 : undefined)`。
-  → `eager` / `lazy-keep-alive` 首次拉起后**不再回收**；`keep-alive` 额外保证常驻。
-- 回收判据：`status==='connected' && inFlight===0 && now-lastUsedAt > timeout`（`server-manager.ts:1731`）；健康检查 30s 轮询。
+- `idleTimeout`：**默认 10 分钟，`0` 表示禁用回收**。
+- 落地规则（`src/registry.ts` 的 `resolveServer`）：**只有 `lazy` 回收**，其余三种一律解析为 `0`；
+  显式 `idleTimeout` 永远优先。`eager` / `keep-alive` 另外在插件激活时连接（`src/index.ts` 消费
+  `registry.residentServers()`），而该列表对默认的全 `lazy` 配置为空——所以「加载期零进程」这条
+  根基没有被破坏。
+
+  > 原计划照抄 pi 的 `persistsAfterFirstSpawn = (eager || lazy-keep-alive)`。那样写有两个问题，
+  > 都在 v0.1.0 发布前修掉了：`keep-alive` 会被按全局窗口回收（pi 靠一个独立的 keep-alive 集合
+  > 让扫描跳过它，本插件没有那个集合），而 `eager` / `keep-alive` 根本没在激活时连接——文档承诺
+  > 了，代码没做。详见 `../CHANGELOG.md` 的 Fixed 一节。
+- 回收判据：连接活着 **且** 无在途调用 **且** 空闲超过窗口；30s 扫一次，`unref` 不阻止宿主退出。
 - 重连：复用 `dsh-mcp-client` 的退避（500ms 起翻倍、30s 封顶、10 次预算），但**启动时不消耗预算**。
 
 ### D4 — 缓存形状 ✅
@@ -159,7 +165,7 @@ dsh-mcp-lazy/
 
 ## 4.5 M0 交付与证据（已落地）
 
-代码位于 `/home/wings/Code_Project/dsh-mcp-lazy`（`src/` → `lib/`，`npm run check` 干净）。
+代码位于本仓库（`src/` → `lib/`，`pnpm run check` 干净）。
 
 | 已实现 | 说明 |
 |---|---|
@@ -182,7 +188,7 @@ dsh-mcp-lazy/
 **已可运行的证据**
 
 ```bash
-cd /home/wings/Code_Project/dsh-mcp-lazy
+cd dsh-mcp-lazy
 npm run check     # typecheck(src+test) + build
 npm test          # 69 用例，覆盖 AC1/AC2/AC3/AC5(部分)/AC8/AC10/AC12/AC17(部分)/AC18
 node scripts/measure-surface.mjs 3
@@ -195,7 +201,7 @@ node scripts/measure-surface.mjs 3
 
 ## 4.6 最终状态（M0–M5 全部落地）
 
-代码：`/home/wings/Code_Project/dsh-mcp-lazy`，`src/` 1778 → 2400 余行，测试 108 个用例全绿，`npm run check` 干净。
+代码：本仓库，`src/` 1778 → 2400 余行，测试 108 个用例全绿，`pnpm run check` 干净。
 
 | 模块 | 职责 |
 |---|---|
@@ -231,7 +237,7 @@ node scripts/measure-surface.mjs 3
 
 ## 4.7 与 pi-mcp-adapter 对照后的修复（第二轮）
 
-见 `PARITY.md`：先做了一次逐模块功能对齐审计（四个只读切片 + 本机实测），查出 3 个缺陷与若干行为差异，随后按建议修掉。**这些改动没有一项移动模型可见的工具面**——仍是 1525 字节 / 11 参数 / 381 token。
+见 `parity-pi-mcp-adapter.md`：先做了一次逐模块功能对齐审计（四个只读切片 + 本机实测），查出 3 个缺陷与若干行为差异，随后按建议修掉。**这些改动没有一项移动模型可见的工具面**——仍是 1525 字节 / 11 参数 / 381 token。
 
 | # | 改动 | 关键点 |
 |---|---|---|
@@ -244,7 +250,7 @@ node scripts/measure-surface.mjs 3
 
 **新增/变更的配置字段**：`server.debug`、`outputGuard`（全局）；`ServerStatus.failedAgoSeconds`（状态输出）。
 **新增模块**：`src/output-guard.ts`、`test/unit/search-ranking.test.ts`、`test/unit/output-guard.test.ts`。
-**测试**：110 → **174** 个用例，全绿；`npm run check`、`npm run test:types` 均干净。
+**测试**：110 → **179** 个用例，全绿；`pnpm run check`、`pnpm run test:types` 均干净。
 **未变**：真实服务器省 token 仍是 `chrome-devtools-mcp@1.6.0` 的 **92.8%**（5313 → 381）。
 
 **第二轮修掉的真 bug**

@@ -162,7 +162,7 @@ estimate.
 ```bash
 node scripts/measure-surface.mjs                                  # the constant cost
 node scripts/measure-token-savings.mjs                            # local fixture
-node scripts/measure-token-savings.mjs --npx chrome-devtools-mcp@1.6.0 --isolated
+node scripts/measure-token-savings.mjs --npx chrome-devtools-mcp@1.6.0
 node scripts/measure-token-savings.mjs 3                          # three fixture servers
 ```
 

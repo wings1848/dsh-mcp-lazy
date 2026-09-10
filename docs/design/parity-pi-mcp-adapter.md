@@ -53,7 +53,8 @@
 |---|---|---|---|
 | 生命周期取值 | `keep-alive \| lazy \| lazy-keep-alive \| eager`，默认 `lazy`（`init.ts:294`） | 同四个值，默认 `lazy`（`index.ts:44`） | ✅ |
 | 空闲回收默认 | 10 分钟，`0` 禁用（`lifecycle.ts:30`、`types.ts:589`） | 同（`schema.ts:27`） | ✅ |
-| 模式→idle 覆盖 | `persistsAfterFirstSpawn = eager \|\| lazy-keep-alive` → `idleTimeout` 覆盖为 0（`init.ts:295-296`） | 同（`registry.ts` `resolveServer`） | ✅ |
+| 模式→idle 覆盖 | 两条路：`eager \|\| lazy-keep-alive` 的 `idleTimeout` 覆盖为 0，且空闲扫描跳过独立的 keep-alive 集合（`init.ts:295-296`、`lifecycle.ts:141`） | 一条路：只有 `lazy` 继承全局窗口，其余三种一律为 0（`registry.ts` `resolveServer`） | 结果一致，机制不同——本插件没有 keep-alive 集合，把 `keep-alive` 并进同一条规则 |
+| 激活时连接 | `startupServers` = `keep-alive` 或 `eager`（`init.ts:329-333`） | 同：`registry.residentServers()` 挑出这两个（`registry.ts`、`index.ts`） | ✅ |
 | 回收判定 | `status==="connected" && inFlight===0 && now-lastUsedAt > timeoutMs`（`server-manager.ts:1731-1736`） | 同表达式（`connection.ts` `sweepIdle`） | ✅ |
 | 扫描周期 | 30000 ms，`unref()`（`lifecycle.ts:93`） | 30000 ms，unref（`connection.ts:32`） | ✅ |
 | 缓存文件 | `<agentDir>/mcp-cache.json`（`metadata-cache.ts:40-42`） | `$DSH_HOME/storages/mcp-lazy/cache.json` | 同构，路径随平台 |
@@ -398,7 +399,7 @@ pi 的 `mcp` 描述是动态生成的（`buildProxyDescription`），所以我�
 
 | 项 | 结果 |
 |---|---|
-| `npm test` | 174 通过 / 0 失败（本轮从 110 增至 174） |
+| `pnpm test` | 179 通过 / 0 失败（本轮从 110 增至 179） |
 | `npm run check` | 通过（typecheck + build 无输出） |
 | `npm run test:types` | 通过 |
 | 恒定工具面 | 1525 字节 / 11 参数 / 381 token，**与修复前逐字节一致** |
