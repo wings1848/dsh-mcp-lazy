@@ -5,46 +5,6 @@
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/wings1848/dsh-mcp-lazy.git"
-  },
-  "keywords": [
-    "deepseek",
-    "harness",
-    "dsh",
-    "dsh-plugin",
-    "mcp",
-    "model-context-protocol",
-    "lazy",
-    "token-efficient"
-  ],
-  "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build": "tsc -p tsconfig.json",
-    "check": "npm run typecheck && npm run build",
-    "test": "node --test test/unit/*.test.ts",
-    "prepack": "npm run build",
-    "pretest": "npm run build && node scripts/link-dsh.mjs",
-    "test:types": "tsc -p tsconfig.test.json",
-    "link-dsh": "node scripts/link-dsh.mjs"
-  },
-  "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.2",
-    "@deepseek-ai/dsh-subprocess": "^0.1.5-rc.1",
-    "@deepseek-ai/dsh-tools": "^0.1.5-rc.1",
-    "@deepseek-ai/schemastery": "^3.18.2",
-    "zod": "^4.0.0"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0"
-  },
-  "dsh": {
-    "bundle": {
-      "patch": "./cordis.patch.yml"
-    }
-  },
   "exports": {
     ".": {
       "types": "./lib/index.d.ts",
@@ -58,14 +18,73 @@
     "src",
     "scripts",
     "cordis.patch.yml",
+    "CHANGELOG.md",
     "README.md",
     "README.zh.md"
   ],
+  "license": "MIT",
+  "author": "wings1848",
+  "homepage": "https://github.com/wings1848/dsh-mcp-lazy#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wings1848/dsh-mcp-lazy.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wings1848/dsh-mcp-lazy/issues"
+  },
+  "keywords": [
+    "deepseek",
+    "harness",
+    "dsh",
+    "dsh-plugin",
+    "mcp",
+    "model-context-protocol",
+    "lazy",
+    "token-efficient",
+    "context-engineering"
+  ],
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "packageManager": "pnpm@12.3.4",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test \"test/unit/*.test.ts\"",
+    "test:types": "tsc -p tsconfig.test.json",
+    "check": "node --run typecheck && node --run test:types && node --run build",
+    "link-dsh": "node scripts/link-dsh.mjs",
+    "measure:surface": "node scripts/measure-surface.mjs",
+    "measure:savings": "node scripts/measure-token-savings.mjs",
+    "pretest": "node --run build && node scripts/link-dsh.mjs",
+    "prepack": "node --run build"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-subprocess": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-tools": "^0.1.5-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.2",
+    "zod": "^4.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0"
+  },
   "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-subprocess": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-tools": "^0.1.5-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.2",
     "@types/node": "^22.0.0",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "zod": "^4.0.0"
   },
   "publishConfig": {
-    "registry": "https://registry.npmjs.org/"
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
   }
 }
