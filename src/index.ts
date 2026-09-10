@@ -136,9 +136,12 @@ function assertServerConfig(servers: ConfigShape['servers'] | undefined): void {
 /**
  * Register the gateway.
  *
- * Activation is synchronous and performs no I/O: no server is contacted, no
- * child process is spawned, and the model-facing tool is registered before the
- * first turn. Everything expensive happens on first use.
+ * Activation spawns nothing for a default configuration and never touches the
+ * network: the model-facing tool is registered before the first turn, and
+ * everything expensive happens on first use. The one thing it does read is the
+ * on-disk metadata cache, synchronously, so that `search` and `describe` can
+ * answer immediately. Only servers explicitly configured `eager` or `keep-alive`
+ * are contacted here, and those connects are fire-and-forget.
  *
  * @param ctx - Plugin context carrying the tool registry.
  * @param config - Resolved gateway configuration.
@@ -189,7 +192,12 @@ export function apply(ctx: Context, config: ConfigShape): void {
   })
   direct.sync()
 
-  ctx.tools.register(
+  // The disposer is kept, not discarded. `register` returns the exact function
+  // that unregisters the tool and it is not fiber-scoped — the harness's own
+  // mcp-client keeps and calls the ones it gets — so dropping it would leave a
+  // stale `mcp` tool behind after an HMR unload, pointing at a registry whose
+  // connection layer is already disposed.
+  const unregisterProxy = ctx.tools.register(
     createProxyTool(
       registry,
       (query, options) => direct.activateFromSearch(query, options),
@@ -219,10 +227,15 @@ export function apply(ctx: Context, config: ConfigShape): void {
 
   ctx.effect(
     () => () => {
+      // Order matters only in that the tool must stop being callable before the
+      // registry behind it is torn down.
+      unregisterProxy()
       activation.abort()
       direct.dispose()
-      void registry.dispose()
-      void outputGuard.dispose()
+      // Awaited, not fired and forgotten: cordis waits for an async disposer,
+      // and returning before the children are closed and the spill directories
+      // removed would let an unload-then-reload race its own predecessor.
+      return Promise.all([registry.dispose(), outputGuard.dispose()]).then(() => undefined)
     },
     `mcp-lazy.dispose(${PROXY_TOOL_NAME})`,
   )

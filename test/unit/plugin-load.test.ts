@@ -35,8 +35,8 @@ after(() => {
 
 /** What `apply` is allowed to touch on the context. */
 interface FakeContext {
-  tools: { register: (definition: ToolDefinition) => void }
-  effect: (callback: () => (() => void), label?: string) => void
+  tools: { register: (definition: ToolDefinition) => () => void }
+  effect: (callback: () => (() => void | Promise<void>), label?: string) => void
 }
 
 /**
@@ -45,20 +45,30 @@ interface FakeContext {
  * `effect` keeps every disposer rather than discarding it, which is how the
  * unload path gets exercised: the host calls those on scope teardown, and a
  * plugin that leaks a tool or a process there would be a real defect.
+ *
+ * `register` returns a real unregister function and `disposeAll` does not touch
+ * the `registered` list. Both matter: the harness's `register` returns the exact
+ * disposer that removes the tool, and an earlier version of this fake cleared the
+ * list itself, which made every "no tool may outlive the plugin scope" assertion
+ * pass no matter what the plugin did.
  */
 function fakeContext(): {
   ctx: FakeContext
   registered: ToolDefinition[]
   effects: string[]
-  disposeAll: () => void
+  disposeAll: () => void | Promise<void>
 } {
   const registered: ToolDefinition[] = []
   const effects: string[] = []
-  const disposers: (() => void)[] = []
+  const disposers: (() => void | Promise<void>)[] = []
   const ctx: FakeContext = {
     tools: {
       register: definition => {
         registered.push(definition)
+        return () => {
+          const index = registered.indexOf(definition)
+          if (index >= 0) registered.splice(index, 1)
+        }
       },
     },
     effect: (callback, label) => {
@@ -70,9 +80,8 @@ function fakeContext(): {
     ctx,
     registered,
     effects,
-    disposeAll: () => {
-      for (const dispose of disposers) dispose()
-      registered.length = 0
+    disposeAll: async () => {
+      for (const dispose of disposers) await dispose()
     },
   }
 }
@@ -264,12 +273,12 @@ describe('AC16 — the plugin unloads cleanly', () => {
     )
 
     // Teardown: the host calls the disposers, and nothing may survive them.
-    disposeAll()
+    await disposeAll()
     assert.equal(registered.length, 0, 'no tool may outlive the plugin scope')
     assert.equal(registered.some(tool => tool.name === PROXY_TOOL_NAME), false)
   })
 
-  it('starts no process merely by being unloaded', () => {
+  it('starts no process merely by being unloaded', async () => {
     const counter = join(process.env['DSH_HOME']!, 'unload-untouched.starts')
     const { ctx, registered, disposeAll } = fakeContext()
     apply(ctx as never, resolved([
@@ -283,7 +292,7 @@ describe('AC16 — the plugin unloads cleanly', () => {
     ]))
     assert.equal(registered.length, 1)
 
-    disposeAll()
+    await disposeAll()
     let starts = 0
     try {
       starts = readFileSync(counter, 'utf8').split('\n').filter(line => line !== '').length
