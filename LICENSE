@@ -19,25 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-## Third-party derivation
-
-This package is a derivative of two MIT-licensed projects. Their notices are
-reproduced below.
-
-### @deepseek-ai/dsh-mcp-client
-
-Copyright (c) 2026 DeepSeek
-
-The connection supervisor, transport factory, environment-scrubbing rules, and
-settings-aware schema alignment in `src/` are derived from that package.
-
-### pi-mcp-adapter
-
-Copyright (c) Nico Bailon
-
-The single-proxy-tool gateway, the persistent metadata cache, the four-mode
-server lifecycle, and the weighted search ranking in `src/` are derived from
-that project.

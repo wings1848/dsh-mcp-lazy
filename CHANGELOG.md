@@ -1,0 +1,192 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.0]
+
+First public release. Requires Node.js `>=22.18.0` and is ESM only. There is one
+runtime dependency, `@modelcontextprotocol/sdk`; the `@deepseek-ai/*` packages are
+peer dependencies supplied by the DSH host (`package.json`).
+
+### Added
+
+- One constant model-facing tool, `mcp`, in place of one native tool per MCP tool.
+  Its schema is built from a literal and does not depend on which servers are
+  configured (`src/schema.ts`): 11 parameters, 1525 bytes on the wire, roughly 381
+  tokens. That figure is constant no matter how many servers are configured.
+  Measured against `chrome-devtools-mcp@1.6.0` (29 tools), native registration
+  would cost 21252 bytes ≈ 5313 tokens per request, so this is 92.8% less
+  (`docs/design/plan.md`, `README.md`).
+- Lazy connections: a server is spawned on first use and reaped once it has been
+  idle past its window (default 10 minutes; `0` disables reaping). Concurrent
+  first calls share one in-flight connection instead of racing, a call in flight
+  is never reaped, and `notifications/tools/list_changed` refreshes the catalog
+  without polling (`src/connection.ts`).
+- Lifecycle modes `lazy` (the default), `lazy-keep-alive`, `eager`, and
+  `keep-alive`, with a per-server `idleTimeout` override (`src/index.ts`,
+  `src/registry.ts`). Only `lazy` is reaped: every other mode means "keep this
+  process", so its window defaults to zero. `eager` and `keep-alive` are also
+  connected while the plugin is being applied; `lazy` and `lazy-keep-alive` wait
+  for first use.
+- A disk metadata cache at `$DSH_HOME/storages/mcp-lazy/cache.json`, invalidated
+  by a SHA-256 hash of the transport configuration and by a 7-day age bound, with
+  atomic writes and a corrupt file ignored rather than fatal
+  (`src/metadata-cache.ts`). This is what lets `search` and `describe` answer
+  without starting anything.
+- Weighted search ranking: camelCase-aware tokenization, per-field weights
+  (qualified name 12, original name 10, server 8, description 5, keywords 5),
+  phrase, prefix and substring bonuses, a coverage threshold for queries longer
+  than two tokens, deterministic tie-breaking, and paging (`limit` defaults to 12
+  and is capped at 40) (`src/search-ranking.ts`, `src/registry.ts`).
+- Suggestions for an unknown tool name, a requirement to disambiguate a name
+  shared by two servers, and explicit diagnostics instead of a fabricated success
+  when a server fails (`src/registry.ts`, `src/proxy-tool.ts`).
+- Optional native promotion through `directTools` (`true`, a list of names, or
+  `"search"` for register-but-inactive) plus `freezeDirectTools` to stop the
+  request prefix from moving after the first sync (`src/direct-tools.ts`).
+- Output bounding, on by default: server-authored text over 50 KiB or 2000 lines
+  is cut to its head, the full text is spilled to a temporary file, and the path
+  is returned to the model. Tool results, `describe` schemas, and server
+  instructions are guarded; the gateway's own text is bounded by construction
+  (`src/output-guard.ts`).
+- Failure backoff: after a server fails it is not retried automatically for 60
+  seconds, and the status text reports how long ago it failed and that retries
+  are suppressed. An explicit `mcp({ connect })` still bypasses the window
+  (`src/registry.ts`, `src/connection.ts`).
+- Bounded stderr capture for stdio servers (last 3 lines, at most 8 KiB) folded
+  into connection errors, with a per-server `debug: true` to inherit stderr
+  instead (`src/connection.ts`).
+- Cold-cache guidance: `mcp({})` names the servers that have no cached metadata
+  yet and tells the model to `connect` them once, rather than pre-warming anything
+  at startup (`src/proxy-tool.ts`).
+- Load-time configuration validation: a duplicate `serverName`, `stdio` without
+  `command`, and `streamable-http` without `url` fail where the configuration is
+  written (`src/index.ts`). Activation stays quiet by default: only servers
+  explicitly configured `eager` or `keep-alive` are contacted, and those connects
+  are fire-and-forget after the tool is registered, so an unreachable server
+  cannot delay the tool surface or fail the plugin load.
+- Configuration stays compatible with `@deepseek-ai/dsh-mcp-client`: `serverName`,
+  `transport`, `command`, `args`, `env`, `cwd`, `url`, `headers`, and
+  `toolCallTimeoutMs` keep their meaning, so an existing entry moves into the
+  `servers` list unchanged (`src/index.ts`, `README.md`).
+- Developer tooling: `scripts/link-dsh.mjs` links the peer packages from the
+  running DSH installation, `scripts/measure-surface.mjs` prints the constant
+  per-request cost, and `scripts/measure-token-savings.mjs` measures the saving
+  against a real server.
+- 178 automated tests in 47 suites, including real child-process tests for lazy
+  startup, process reuse, idle reaping, cancellation, timeouts, crash recovery,
+  and live tool-list refresh (`README.md`,
+  `docs/design/parity-pi-mcp-adapter.md`).
+- Documentation: `README.md`, `README-zh.md`, `docs/design/plan.md` (acceptance
+  criteria AC1–AC18), and `docs/design/parity-pi-mcp-adapter.md` (a module-by-module
+  audit against `pi-mcp-adapter` v2.33.0).
+- Not in this release, by design: OAuth and bearer-token storage, MCP resources
+  and prompts, sampling and elicitation, forwarding image payloads, shared
+  processes, and configuration interoperability with other hosts. The boundaries
+  are listed in `README-zh.md`.
+
+### Fixed
+
+Defects found during development — by the parity audit in
+`docs/design/parity-pi-mcp-adapter.md`, by mounting the plugin in a real harness,
+and by tests that were observed to fail first — and fixed before this release:
+
+- `eager` and `keep-alive` never connected during activation, so both behaved
+  exactly like their lazy counterparts: a documented setting that silently did
+  nothing. Nothing in `apply()` or the registry ever acted on the "connect during
+  activation" half of the lifecycle contract, and the existing suite could not
+  catch it because that suite asserts activation stays quiet — correct for the
+  default mode, wrong for these two. Found by booting the plugin in an isolated
+  DSH profile and watching a fixture server's start counter stay empty. `apply()`
+  now connects exactly the servers `registry.residentServers()` selects
+  (`src/index.ts`, `src/registry.ts`).
+- `keep-alive` was reaped like `lazy`. `resolveServer` zeroed the idle window for
+  `eager` and `lazy-keep-alive` only, and this plugin has no separate keep-alive
+  registry for the idle sweep to skip — which is how `pi-mcp-adapter` keeps its
+  `keep-alive` servers alive. The mode promised residency and delivered a
+  10-minute window. Every mode except `lazy` now resolves to no reaping
+  (`src/registry.ts`).
+- `scripts/link-dsh.mjs` assumed the four peer packages were siblings under one
+  installation root. That holds for a global bun install but not for pnpm, where
+  each package gets its own `node_modules/.pnpm/<pkg>@<ver>` directory, so the
+  script reported packages as missing while leaving stale links in place. Each
+  peer is now located independently (`scripts/link-dsh.mjs`).
+- The suite leaked a temporary directory per `mkdtempSync` call, roughly thirty
+  per run, and never removed any of them. A throwaway `DSH_HOME` is still created
+  per suite, but it is now registered with `test/helpers/tmp.ts` and removed on
+  process exit, including when an assertion fails. The two measurement scripts
+  clean up after themselves the same way.
+
+- Cached tool lists went permanently stale when a filter was relaxed. The cache
+  stored the post-filter tool list while the configuration hash deliberately
+  ignored `includeTools`/`excludeTools`, so removing an exclusion could not bring
+  the tool back for up to 7 days — and under lazy loading, possibly forever.
+  Filtering now happens on the read path and the cache holds the full list
+  (`src/registry.ts`, `src/metadata-cache.ts`).
+- CamelCase tool names could not be found by sub-word search: tokenization did
+  not split camelCase, so `getPixels` did not match the query `pixels`
+  (`src/search-ranking.ts`).
+- Regular-expression search had no safety guard at all. `(a+)+c` against a
+  28-character run took about 2 seconds and grows exponentially, and the pattern
+  is evaluated synchronously inside the tool call, so a single search could stall
+  the session (`src/search-ranking.ts`).
+- A rejected regular expression was reported as "No MCP tool matches", which the
+  model reads as "the tool does not exist" rather than "the pattern is wrong".
+  Rejection reasons now reach the model verbatim (`src/search-ranking.ts`,
+  `src/proxy-tool.ts`).
+- There was no failure backoff, so a broken server was re-spawned and made to wait
+  out the full call timeout on every attempt (`src/registry.ts`).
+- stdio children inherited stderr, which left the SDK's `transport.stderr` null
+  and a startup failure with no diagnostic at all. stderr is now piped and its
+  tail is quoted in the error (`src/connection.ts`).
+- `includeTools` patterns such as `read_*` did not match the qualified name
+  `srv__read_dir`, because matching was done against the full name only
+  (`src/naming.ts`).
+- `connect` against a disabled server threw, so the model saw a failed tool
+  instead of a readable diagnostic (`src/registry.ts`).
+- The idle sweep read the cached window instead of resolving it, which made every
+  server look like "never reap" (`src/connection.ts`).
+- A tool call required the catalog to exist already, so the first call against a
+  cold cache always failed. Resolution now discovers on demand
+  (`src/registry.ts`).
+- Native promotion failed silently because the harness's `defineTool` takes its
+  own parameter DSL rather than a raw JSON Schema; a converter was added
+  (`src/direct-tools.ts`).
+- The catalog-refresh subscription was installed only by `apply()`, so tests and
+  any other direct user of the registry never received it. The registry now owns
+  the subscription (`src/registry.ts`).
+- Installing the peer packages from the registry produced a second `dsh-tools`
+  instance one release ahead of the running harness (0.1.5-rc.2 against
+  0.1.5-rc.1), a class-identity hazard for every tool definition this plugin
+  registers. `scripts/link-dsh.mjs` now links them from the running installation.
+- The design notes claimed oversized tool output was handled by an existing
+  framework spill. The harness has no framework-level truncation of tool output,
+  so this release implements the output guard instead
+  (`docs/design/parity-pi-mcp-adapter.md`).
+
+### Security
+
+- stdio children start from a scrubbed environment: variables whose names match
+  `/KEY|PASSWORD|SECRET|TOKEN/i` and variables whose names begin with `DSH_` are
+  dropped before spawn, and an explicitly configured `env` entry is merged on top
+  of the scrub (`src/connection.ts`).
+- Regular-expression search is capped at 256 characters and rejects patterns that
+  nest an unbounded quantifier inside an unboundedly quantified group. The check
+  is deliberately narrower than a full ReDoS analyser: overlapping alternation
+  such as `(a|aa)+` and polynomial backtracking such as `a*a*a*b` are not caught
+  (`src/search-ranking.ts`; see `SECURITY.md`).
+- Spilled output is written with mode `0o600` under a per-process
+  `dsh-mcp-lazy-output-` directory in the system temp directory, capped at 16 MiB
+  per file, and removed when the plugin unloads (`src/output-guard.ts`,
+  `src/index.ts`).
+- Failure diagnostics quote at most the last 3 stderr lines, so a server that logs
+  heavily cannot flood the model's context through an error message
+  (`src/connection.ts`).
+
+[Unreleased]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/wings1848/dsh-mcp-lazy/releases/tag/v0.1.0
