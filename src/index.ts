@@ -3,7 +3,7 @@
  *
  * Registers exactly one model-facing tool (`mcp`) for every configured MCP
  * server, discovers tool metadata into a disk cache, and starts a server only
- * when a tool call actually needs it. See `PLAN.md` for the acceptance criteria.
+ * when a tool call actually needs it. See `docs/design/plan.md` for the acceptance criteria.
  *
  * @module dsh-mcp-lazy
  */
@@ -197,8 +197,29 @@ export function apply(ctx: Context, config: ConfigShape): void {
     ),
   )
 
+  // `eager` and `keep-alive` mean "resident from activation", and pi-mcp-adapter
+  // connects exactly that pair at init. Without this loop both modes would
+  // behave like their lazy counterparts — a documented setting that silently
+  // does nothing.
+  //
+  // A default configuration is all-`lazy`, so this list is empty and activation
+  // still spawns nothing. That is the reason the plugin exists, and it stays
+  // true. Registration happens first so a slow server cannot delay the
+  // model-facing tool surface.
+  //
+  // Failures are not propagated: an unreachable server must not fail plugin
+  // load. `ensureConnected` records the failure for the retry backoff and for
+  // status output, which is where it belongs. The controller ties in-flight
+  // connects to the plugin's lifetime, so unloading does not leave a spawn
+  // racing the teardown.
+  const activation = new AbortController()
+  for (const entry of registry.residentServers()) {
+    void registry.ensureConnected(entry, activation.signal).catch(() => {})
+  }
+
   ctx.effect(
     () => () => {
+      activation.abort()
       direct.dispose()
       void registry.dispose()
       void outputGuard.dispose()

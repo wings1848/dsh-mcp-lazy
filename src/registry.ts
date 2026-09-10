@@ -180,10 +180,16 @@ interface ResolvedServer {
 /**
  * Resolve the lifecycle and idle window for one entry.
  *
- * Mirrors the `pi-mcp-adapter` rule: a server that is meant to persist after its
- * first spawn (`eager`, `lazy-keep-alive`) defaults to no reaping at all, while
- * every other mode inherits the global window. An explicit `idleTimeout`, `0`
- * included, always wins.
+ * Every mode except `lazy` means "keep this process", so it defaults to no
+ * reaping at all and only `lazy` inherits the global window. An explicit
+ * `idleTimeout`, `0` included, always wins.
+ *
+ * `pi-mcp-adapter` reaches the same outcome by two routes: it zeroes the window
+ * for `eager` and `lazy-keep-alive`, and its idle sweep skips any server in its
+ * keep-alive set — which is exactly the `keep-alive` mode. This plugin has no
+ * separate keep-alive set, so `keep-alive` is zeroed here instead. Folding it in
+ * rather than adding a second mechanism keeps one rule in one place; the
+ * observable behaviour matches pi either way.
  *
  * @param entry - The configured server entry.
  * @param globalIdleMinutes - The plugin-level idle window in minutes.
@@ -191,8 +197,8 @@ interface ResolvedServer {
  */
 export function resolveServer(entry: ServerEntry, globalIdleMinutes: number): ResolvedServer {
   const lifecycle: ServerLifecycle = entry.lifecycle ?? 'lazy'
-  const persistsAfterFirstSpawn = lifecycle === 'eager' || lifecycle === 'lazy-keep-alive'
-  const idleMinutes = entry.idleTimeout ?? (persistsAfterFirstSpawn ? 0 : globalIdleMinutes)
+  const reaps = lifecycle === 'lazy'
+  const idleMinutes = entry.idleTimeout ?? (reaps ? globalIdleMinutes : 0)
   return { entry, lifecycle, idleTimeoutMs: Math.max(0, idleMinutes) * 60_000 }
 }
 
@@ -256,6 +262,27 @@ export class McpGatewayRegistry {
   /** Every configured server, in configuration order. */
   get servers(): readonly ServerEntry[] {
     return this.#servers.map(server => server.entry)
+  }
+
+  /**
+   * Servers whose configuration asks to be connected during activation.
+   *
+   * `eager` and `keep-alive` mean "resident from the start", and `pi-mcp-adapter`
+   * connects exactly this pair at init. The two differ only in whether the
+   * lifecycle manager also health-checks them; both resolve to no idle reaping.
+   *
+   * The default mode is `lazy`, so a default configuration yields an empty list
+   * and activation still spawns nothing — which is the point of the plugin. This
+   * is empty-in-the-common-case on purpose, not by accident.
+   *
+   * Disabled servers are excluded: they are configured but must not be started.
+   */
+  residentServers(): ServerEntry[] {
+    return this.#servers
+      .filter(server =>
+        server.entry.disabled !== true
+        && (server.lifecycle === 'eager' || server.lifecycle === 'keep-alive'))
+      .map(server => server.entry)
   }
 
   /**

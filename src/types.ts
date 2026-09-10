@@ -16,10 +16,18 @@ export const SERVER_NAME_PATTERN = /^[A-Za-z0-9_-]{1,32}$/
 /**
  * When a server's process may exist.
  *
+ * "Connect during activation" means the plugin contacts the server while it is
+ * being applied, before any tool call. Only these two modes spawn anything at
+ * activation; a default (all-`lazy`) configuration spawns nothing.
+ *
  * - `lazy` (default): connect on first use, reap when idle.
  * - `lazy-keep-alive`: connect on first use, then never reap.
- * - `eager`: connect during activation, then reap when idle.
+ * - `eager`: connect during activation, then never reap.
  * - `keep-alive`: connect during activation and never reap.
+ *
+ * `eager` and `keep-alive` currently differ only in intent — both resolve to no
+ * reaping. They are kept separate because pi-mcp-adapter defines both and a
+ * configuration carried over from it must keep working.
  */
 export type ServerLifecycle = 'lazy' | 'lazy-keep-alive' | 'eager' | 'keep-alive'
 

@@ -13,17 +13,18 @@
  */
 
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { after, before, describe, it } from 'node:test'
+import { tempDir } from '../helpers/tmp.ts'
 import { LazyConnections } from '../../lib/connection.js'
+import { apply } from '../../lib/index.js'
 import { metadataCachePath } from '../../lib/metadata-cache.js'
 import { qualifiedToolName } from '../../lib/naming.js'
 import { OutputGuard } from '../../lib/output-guard.js'
 import { createProxyTool } from '../../lib/proxy-tool.js'
-import { McpGatewayRegistry } from '../../lib/registry.js'
+import { McpGatewayRegistry, resolveServer } from '../../lib/registry.js'
 import type { Config, ServerEntry, ToolCallResult } from '../../lib/types.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -49,7 +50,7 @@ function outputGuard(options?: ConstructorParameters<typeof OutputGuard>[0]): Ou
 }
 
 before(() => {
-  workdir = mkdtempSync(join(tmpdir(), 'dsh-mcp-lazy-e2e-'))
+  workdir = tempDir('dsh-mcp-lazy-e2e-')
   process.env['DSH_HOME'] = join(workdir, 'home')
 })
 
@@ -832,5 +833,112 @@ describe('M8 — failing servers are diagnosable and not retried blindly', () =>
     assert.equal(registry.status()[0]?.failedAgoSeconds, undefined)
     assert.equal(registry.status()[0]?.lastError, undefined)
     assert.ok(startCount(counterFile) >= 2)
+  })
+})
+
+describe('M9 — activation connects only what asked to be resident', () => {
+  /**
+   * Poll until `check` passes.
+   *
+   * Activation connects are deliberately fire-and-forget so a slow server cannot
+   * delay the model-facing tool surface, which means there is no promise for a
+   * test to await. Observing the fixture's start counter is the alternative.
+   */
+  async function waitFor(check: () => boolean, label: string, timeoutMs = 10_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline) {
+      if (check()) return
+      await new Promise(resolve => setTimeout(resolve, 25))
+    }
+    throw new Error(`timed out waiting for ${label}`)
+  }
+
+  it('selects exactly eager and keep-alive, and never a disabled server', () => {
+    const entries = [
+      fixtureServer('pick-lazy').entry,
+      fixtureServer('pick-lazy-keep', { lifecycle: 'lazy-keep-alive' }).entry,
+      fixtureServer('pick-eager', { lifecycle: 'eager' }).entry,
+      fixtureServer('pick-keep', { lifecycle: 'keep-alive' }).entry,
+      fixtureServer('pick-disabled', { lifecycle: 'keep-alive', disabled: true }).entry,
+    ]
+    const registry = new McpGatewayRegistry({ idleTimeout: 10, servers: entries })
+
+    assert.deepEqual(
+      registry.residentServers().map(entry => entry.serverName),
+      ['pick-eager', 'pick-keep'],
+    )
+  })
+
+  it('spawns the resident servers while applying the plugin, and leaves the lazy ones alone', async () => {
+    const lazy = fixtureServer('boot-lazy')
+    const lazyKeep = fixtureServer('boot-lazy-keep', { lifecycle: 'lazy-keep-alive' })
+    const eager = fixtureServer('boot-eager', { lifecycle: 'eager' })
+    const keep = fixtureServer('boot-keep', { lifecycle: 'keep-alive' })
+
+    const disposers: (() => void)[] = []
+    const ctx = {
+      tools: { register: () => () => {} },
+      effect: (callback: () => () => void) => {
+        disposers.push(callback())
+      },
+    }
+
+    apply(ctx as never, {
+      idleTimeout: 10,
+      servers: [lazy.entry, lazyKeep.entry, eager.entry, keep.entry],
+    } as never)
+
+    try {
+      await waitFor(
+        () => startCount(eager.counterFile) >= 1 && startCount(keep.counterFile) >= 1,
+        'the eager and keep-alive servers to be spawned at activation',
+      )
+      assert.equal(startCount(lazy.counterFile), 0, 'lazy must not spawn during activation')
+      assert.equal(
+        startCount(lazyKeep.counterFile),
+        0,
+        'lazy-keep-alive must not spawn during activation',
+      )
+    } finally {
+      for (const dispose of disposers) dispose()
+    }
+  })
+
+  it('gives every lifecycle but lazy an unlimited idle window', () => {
+    const windowFor = (overrides: Partial<ServerEntry>): number =>
+      resolveServer(
+        { serverName: 'x', transport: 'stdio', command: 'x', ...overrides },
+        10,
+      ).idleTimeoutMs
+
+    assert.equal(windowFor({}), 600_000, 'an omitted lifecycle is lazy and inherits the global window')
+    assert.equal(windowFor({ lifecycle: 'lazy' }), 600_000)
+    assert.equal(windowFor({ lifecycle: 'lazy-keep-alive' }), 0)
+    assert.equal(windowFor({ lifecycle: 'eager' }), 0)
+    assert.equal(windowFor({ lifecycle: 'keep-alive' }), 0, 'keep-alive must never be reaped')
+
+    // An explicit window wins over the lifecycle default, `0` included.
+    assert.equal(windowFor({ lifecycle: 'keep-alive', idleTimeout: 3 }), 180_000)
+    assert.equal(windowFor({ lifecycle: 'lazy', idleTimeout: 0 }), 0)
+  })
+
+  it('never reaps a keep-alive server, going through the real lifecycle rule', async () => {
+    const { entry } = fixtureServer('ka-real', { lifecycle: 'keep-alive' })
+    let clock = Date.now()
+    const connections = new LazyConnections(
+      server => resolveServer(server, 10).idleTimeoutMs,
+      { startSweeper: false, now: () => clock },
+    )
+    layers.push(connections)
+    connections.setQualifier(qualifiedToolName)
+    const registry = new McpGatewayRegistry({ idleTimeout: 10, servers: [entry] }, connections)
+    registry.bindLiveCatalogRefresh()
+
+    await call(registry, 'echo', { text: 'x' })
+    clock += 3_600_000
+    assert.deepEqual(await connections.sweepIdle(), [], 'an hour idle must not reap keep-alive')
+    assert.equal(connections.isConnected('ka-real'), true)
+
+    await registry.dispose()
   })
 })
