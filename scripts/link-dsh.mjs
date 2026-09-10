@@ -11,8 +11,12 @@
  * drifts a release behind (`0.1.5-rc.2` on the registry versus the `0.1.5-rc.1`
  * this harness is actually running).
  *
- * So: symlink the peer packages into `node_modules` from the global install, and
- * let every other dependency resolve normally. Run automatically by `npm test`.
+ * So: symlink the peer packages into `node_modules` from the harness install, and
+ * let every other dependency resolve normally. Run automatically by `pretest`.
+ *
+ * Every peer is located independently. They are siblings under a global bun
+ * install, but under pnpm each one lives in its own `node_modules/.pnpm/<pkg>@<ver>`
+ * directory — assuming a shared root finds the first package and misses the rest.
  *
  * Usage: node scripts/link-dsh.mjs [--check]
  */
@@ -28,51 +32,53 @@ const PEER_PACKAGES = ['@deepseek-ai/cordis', '@deepseek-ai/dsh-tools', '@deepse
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const checkOnly = process.argv.includes('--check')
 
-/** Locate the global DSH installation that provides these packages. */
-function findDshInstall() {
-  const candidates = []
-  if (process.env['DSH_INSTALL_ROOT'] !== undefined) candidates.push(process.env['DSH_INSTALL_ROOT'])
+/** Candidate roots for a global DSH installation, most specific first. */
+function installRoots() {
+  const roots = []
+  if (process.env['DSH_INSTALL_ROOT'] !== undefined) roots.push(process.env['DSH_INSTALL_ROOT'])
   if (process.env['BUN_INSTALL'] !== undefined) {
-    candidates.push(join(process.env['BUN_INSTALL'], 'install', 'global', 'node_modules'))
+    roots.push(join(process.env['BUN_INSTALL'], 'install', 'global', 'node_modules'))
   }
-  candidates.push(join(process.env['HOME'] ?? '', '.bun', 'install', 'global', 'node_modules'))
+  roots.push(join(process.env['HOME'] ?? '', '.bun', 'install', 'global', 'node_modules'))
+  return roots.filter(root => root !== '')
+}
 
-  for (const candidate of candidates) {
-    if (candidate !== '' && existsSync(join(candidate, '@deepseek-ai', 'dsh-tools', 'package.json'))) {
-      return candidate
-    }
+/**
+ * Locate one peer package's directory.
+ *
+ * Tries the global install roots first, then falls back to whatever this
+ * process can resolve — which covers a profile-local install, and a CI checkout
+ * where the only copies are the registry ones pnpm installed. Resolution is per
+ * package because pnpm does not place them side by side.
+ *
+ * @param name - The package name to locate.
+ * @returns Its directory, or undefined when nothing provides it.
+ */
+function findPeer(name) {
+  for (const root of installRoots()) {
+    const candidate = join(root, name)
+    if (existsSync(join(candidate, 'package.json'))) return candidate
   }
-
-  // Last resort: wherever this process can resolve the package from, which covers
-  // a profile-local install.
   try {
     const require = createRequire(join(packageRoot, 'package.json'))
-    const resolved = require.resolve('@deepseek-ai/dsh-tools/package.json')
-    return dirname(dirname(dirname(resolved)))
+    return dirname(require.resolve(`${name}/package.json`))
   } catch {
     return undefined
   }
 }
 
-const dshInstall = findDshInstall()
-if (dshInstall === undefined || dshInstall === '') {
-  console.error(
-    'link-dsh: could not find a DSH installation providing @deepseek-ai/dsh-tools.\n' +
-      'Set DSH_INSTALL_ROOT to the directory containing @deepseek-ai/.',
-  )
-  process.exit(checkOnly ? 1 : 0)
-}
-
 let linked = 0
 let alreadyCorrect = 0
 const problems = []
+const sources = new Set()
 
 for (const name of PEER_PACKAGES) {
-  const target = join(dshInstall, name)
-  if (!existsSync(target)) {
-    problems.push(`${name}: not present in ${dshInstall}`)
+  const target = findPeer(name)
+  if (target === undefined) {
+    problems.push(`${name}: no installation provides it`)
     continue
   }
+  sources.add(dirname(target))
 
   const link = join(packageRoot, 'node_modules', name)
   if (existsSync(link) || isSymlink(link)) {
@@ -100,13 +106,15 @@ for (const name of PEER_PACKAGES) {
 
 if (problems.length > 0) {
   for (const problem of problems) console.error(`link-dsh: ${problem}`)
+  // Without a harness there is nothing to link to, and the registry copies pnpm
+  // installed are a working substitute — which is what CI relies on. Only
+  // `--check` treats that as a failure.
   if (checkOnly) process.exit(1)
 }
 
 if (!checkOnly) {
-  console.log(
-    `link-dsh: ${linked} linked, ${alreadyCorrect} already correct (harness at ${dshInstall})`,
-  )
+  const where = sources.size === 1 ? [...sources][0] : `${sources.size} locations`
+  console.log(`link-dsh: ${linked} linked, ${alreadyCorrect} already correct (from ${where})`)
 }
 
 /** Whether a path is a symbolic link, broken or not. */
