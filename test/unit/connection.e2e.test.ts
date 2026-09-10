@@ -70,6 +70,30 @@ function startCount(file: string): number {
   }
 }
 
+/**
+ * Wait for a pid to disappear.
+ *
+ * `close()` is asynchronous, so a just-killed child is briefly a zombie and
+ * signal 0 still succeeds against one. Polling keeps the test fast when the
+ * process dies promptly and honest when it does not.
+ *
+ * @param pid - The process to watch.
+ * @param timeoutMs - How long to wait before concluding it is still alive.
+ * @returns True once the process is gone.
+ */
+async function childExits(pid: number, timeoutMs = 5000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      process.kill(pid, 0)
+    } catch {
+      return true
+    }
+    await new Promise(resolve => setTimeout(resolve, 25))
+  }
+  return false
+}
+
 /** Read the pid the fixture last reported. */
 function lastPid(file: string): string {
   try {
@@ -339,6 +363,33 @@ describe('M2 — cancellation and failure', () => {
     assert.equal(startCount(counterFile), 2, 'the next call must start a fresh process')
 
     await registry.dispose()
+  })
+
+  it('AC16: kills the child when the catalog fetch fails after the handshake', async () => {
+    // The window that matters: the server is up and `initialize` succeeded, so
+    // the SDK considers the connection established. Then `tools/list` fails.
+    // Nothing else in this suite covers it — FIXTURE_FAIL exits before the
+    // handshake, which the SDK cleans up by itself.
+    const { entry, pidFile } = fixtureServer(
+      'half-open',
+      {},
+      { env: { FIXTURE_FAIL_TOOLS_LIST: '1' } },
+    )
+    const connections = new LazyConnections(() => 600_000, { startSweeper: false })
+    layers.push(connections)
+    connections.setQualifier(qualifiedToolName)
+
+    await assert.rejects(() => connections.connect(entry), /tools\/list/i)
+    const pid = Number(readFileSync(pidFile, 'utf8'))
+    assert.ok(Number.isInteger(pid) && pid > 0, 'the fixture must have recorded its pid')
+    assert.equal(await childExits(pid), true, 'the child must not outlive a failed connect')
+
+    // And the leak must not compound: a second attempt leaves nothing behind
+    // either, because the first attempt already released its process.
+    await assert.rejects(() => connections.connect(entry), /tools\/list/i)
+    assert.equal(connections.isConnected('half-open'), false)
+
+    await connections.dispose()
   })
 })
 
@@ -870,10 +921,13 @@ describe('M9 — activation connects only what asked to be resident', () => {
   })
 
   it('spawns the resident servers while applying the plugin, and leaves the lazy ones alone', async () => {
+    // Two servers, not four: which lifecycles are resident is settled without
+    // processes by the test above, so this one only has to show that a resident
+    // server really is started at activation and a lazy one really is not.
+    // Spawning fewer children keeps it off the clock, which matters on a slow
+    // filesystem where four concurrent node starts is enough to blow a timeout.
     const lazy = fixtureServer('boot-lazy')
-    const lazyKeep = fixtureServer('boot-lazy-keep', { lifecycle: 'lazy-keep-alive' })
     const eager = fixtureServer('boot-eager', { lifecycle: 'eager' })
-    const keep = fixtureServer('boot-keep', { lifecycle: 'keep-alive' })
 
     const disposers: (() => void)[] = []
     const ctx = {
@@ -885,20 +939,15 @@ describe('M9 — activation connects only what asked to be resident', () => {
 
     apply(ctx as never, {
       idleTimeout: 10,
-      servers: [lazy.entry, lazyKeep.entry, eager.entry, keep.entry],
+      servers: [lazy.entry, eager.entry],
     } as never)
 
     try {
       await waitFor(
-        () => startCount(eager.counterFile) >= 1 && startCount(keep.counterFile) >= 1,
-        'the eager and keep-alive servers to be spawned at activation',
+        () => startCount(eager.counterFile) >= 1,
+        'the eager server to be spawned at activation',
       )
       assert.equal(startCount(lazy.counterFile), 0, 'lazy must not spawn during activation')
-      assert.equal(
-        startCount(lazyKeep.counterFile),
-        0,
-        'lazy-keep-alive must not spawn during activation',
-      )
     } finally {
       for (const dispose of disposers) dispose()
     }

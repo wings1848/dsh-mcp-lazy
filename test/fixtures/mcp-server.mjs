@@ -13,12 +13,14 @@
  * - `FIXTURE_PID_FILE`    — file receiving this process's pid.
  * - `FIXTURE_INSTRUCTIONS`— server instructions returned during initialization.
  * - `FIXTURE_FAIL`        — exit non-zero immediately, before speaking MCP.
+ * - `FIXTURE_FAIL_TOOLS_LIST` — finish the handshake, then fail `tools/list`.
  * - `FIXTURE_EXIT_AFTER_MS` — exit once this many milliseconds have passed.
  */
 
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 const pidFile = process.env.FIXTURE_PID_FILE
@@ -132,6 +134,19 @@ function countStarts() {
 const exitAfter = Number(process.env.FIXTURE_EXIT_AFTER_MS ?? '0')
 if (Number.isFinite(exitAfter) && exitAfter > 0) {
   setTimeout(() => process.exit(0), exitAfter).unref()
+}
+
+// Fail `tools/list` while `initialize` keeps succeeding. `FIXTURE_FAIL` exits
+// before the handshake, which the SDK cleans up on its own; this knob covers the
+// window after a server is up but its catalog cannot be read, which is where a
+// half-open connection has to be torn down by hand.
+//
+// This has to run after every `registerTool` call, because the first one installs
+// the SDK's own `tools/list` handler.
+if (process.env.FIXTURE_FAIL_TOOLS_LIST) {
+  server.server.setRequestHandler(ListToolsRequestSchema, () => {
+    throw new Error('fixture: tools/list is configured to fail')
+  })
 }
 
 const readyFile = process.env.FIXTURE_READY_FILE

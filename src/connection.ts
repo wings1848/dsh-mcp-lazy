@@ -456,11 +456,12 @@ export class LazyConnections implements GatewayConnection {
     if (inFlight !== undefined) return inFlight
 
     const attempt = (async (): Promise<LiveToolCatalog> => {
+      let client: Client | undefined
+      let handedOff = false
       try {
-        const client = await this.#open(entry)
+        client = await this.#open(entry)
         const catalog = await this.#fetchCatalog(client, entry.serverName, this.#qualify)
         if (this.#disposed) {
-          await client.close().catch(() => undefined)
           throw new Error('the gateway was disposed while connecting')
         }
         this.#states.set(entry.serverName, {
@@ -469,6 +470,7 @@ export class LazyConnections implements GatewayConnection {
           inFlight: 0,
           catalog,
         })
+        handedOff = true
         this.#errors.delete(entry.serverName)
         // A server that dies on its own must not leave a dead entry behind.
         client.onclose = () => {
@@ -477,6 +479,14 @@ export class LazyConnections implements GatewayConnection {
         }
         return catalog
       } catch (error) {
+        // Close anything that was opened but never handed to #states. A client
+        // the state map does not know about is unreachable by sweepIdle,
+        // disconnect, and dispose, so its child process would outlive every
+        // mechanism that exists to end it — and the next attempt would spawn
+        // another one. `tools/list` failing after a successful handshake is the
+        // ordinary way to land here, and the SDK does not clean it up: as far as
+        // it is concerned the connection succeeded.
+        if (client !== undefined && !handedOff) await client.close().catch(() => undefined)
         const message = error instanceof Error ? error.message : String(error)
         this.#errors.set(entry.serverName, message)
         throw error
