@@ -53,7 +53,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test \"test/unit/*.test.ts\"",
     "test:types": "tsc -p tsconfig.test.json",
-    "check": "node --run typecheck && node --run test:types && node --run build",
+    "check": "node --run typecheck && node --run build && node --run test:types",
     "link-dsh": "node scripts/link-dsh.mjs",
     "measure:surface": "node scripts/measure-surface.mjs",
     "measure:savings": "node scripts/measure-token-savings.mjs",

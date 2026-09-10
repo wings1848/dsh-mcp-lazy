@@ -27,13 +27,27 @@ If `pnpm test` fails with an error about `@deepseek-ai/dsh-tools`, see
 | `pnpm run typecheck` | Type-check `src/` without emitting |
 | `pnpm run test:types` | Type-check `src/` and `test/` together |
 | `pnpm test` | Build, relink the peers, then `node --test` over `test/unit/*.test.ts` |
-| `pnpm run check` | `typecheck` + `test:types` + `build` — what CI runs before the tests |
+| `pnpm run check` | `typecheck`, then `build`, then `test:types` — what CI runs before the tests |
 | `pnpm run link-dsh` | Symlink the `@deepseek-ai/*` peers from the running DSH install |
 | `pnpm run measure:surface` | Print the constant model-facing cost in bytes and parameters |
 | `pnpm run measure:savings` | Compare native registration against the gateway |
 
 `test` has a `pretest` hook that builds and relinks, so a fresh checkout can go straight to
 `pnpm test`. There is no separate build step to remember.
+
+**The order inside `check` is not cosmetic.** `typecheck` reads only `src/` and needs nothing
+built. `test:types` reads `test/` as well, and the tests import `../../lib/*.js` — so it needs
+`lib/` to exist. `build` therefore has to sit between them. With `test:types` first, `check`
+passes on any machine where `lib/` is already lying around and fails on every fresh clone with
+twenty-nine `TS2307: Cannot find module '../../lib/...'` errors. That is not hypothetical; it
+is what CI caught on the first push.
+
+To reproduce a runner locally, delete both generated directories before believing a green run:
+
+```bash
+rm -rf lib node_modules
+pnpm install --frozen-lockfile && pnpm run check && pnpm test
+```
 
 `--test-name-pattern` is the fast loop while iterating:
 
