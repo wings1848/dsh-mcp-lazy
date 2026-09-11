@@ -14,7 +14,6 @@
  */
 
 import assert from 'node:assert/strict'
-null
 import { join } from 'node:path'
 import { after, before, describe, it } from 'node:test'
 import { tempDir } from '../helpers/tmp.ts'
