@@ -74,7 +74,30 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          gh release create "$GITHUB_REF_NAME" \
-            --title "$GITHUB_REF_NAME" \
-            --verify-tag \
-            --generate-notes
+          version="${GITHUB_REF_NAME#v}"
+
+          # Prefer the changelog section over --generate-notes. Generated notes
+          # compare against the previous tag, which yields a bare "Full Changelog"
+          # link for a first release and a bare commit list for every one after
+          # it. The changelog is written by hand and says why each change exists,
+          # so it is the better release page whenever it has something to say.
+          notes=$(awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" { capture = 1; next }
+            capture && /^## \[/ { exit }
+            capture { print }
+          ' CHANGELOG.md | sed '/^\[.*\]:/d')
+
+          if [ -n "$(printf '%s' "$notes" | tr -d '[:space:]')" ]; then
+            printf '%s\n' "$notes" > /tmp/notes.md
+            echo "using the CHANGELOG section for ${version} ($(wc -l < /tmp/notes.md) lines)"
+            gh release create "$GITHUB_REF_NAME" \
+              --title "$GITHUB_REF_NAME" \
+              --verify-tag \
+              --notes-file /tmp/notes.md
+          else
+            echo "::warning::no CHANGELOG section for ${version}; falling back to generated notes"
+            gh release create "$GITHUB_REF_NAME" \
+              --title "$GITHUB_REF_NAME" \
+              --verify-tag \
+              --generate-notes
+          fi
