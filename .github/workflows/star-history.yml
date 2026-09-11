@@ -1,0 +1,32 @@
+name: Star History
+
+on:
+  schedule:
+    # GitHub stopped exposing stargazers to anyone but a repository's admins, so
+    # third-party star-history services can no longer read it. This renders the
+    # chart from the API with a token and publishes it to an `output` branch,
+    # which the README links to as a plain static file.
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: star-history
+  cancel-in-progress: false
+
+jobs:
+  star-history:
+    name: render
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Pinned to an exact version rather than the moving `v2` tag. This action
+      # receives a token, and a third-party action handed a credential should be
+      # the version that was reviewed, not whatever `v2` points at tomorrow.
+      # Upgrading means changing this one line.
+      - uses: ranxi2001/star-history-ci@v2.0.0
+        with:
+          repos: ${{ github.repository }}
+          token: ${{ secrets.STAR_HISTORY_TOKEN }}

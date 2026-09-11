@@ -130,6 +130,13 @@ pnpm run check     # typecheck (sources and tests) then build
 
 See [CONTRIBUTING.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/CONTRIBUTING.md).
 
+## Star history
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/wings1848/dsh-mcp-lazy/output/star-history-dark.svg">
+  <img alt="Star history chart" src="https://raw.githubusercontent.com/wings1848/dsh-mcp-lazy/output/star-history-light.svg">
+</picture>
+
 ## License
 
 MIT — see [LICENSE](https://github.com/wings1848/dsh-mcp-lazy/blob/main/LICENSE). The connection supervisor, transport factory, and

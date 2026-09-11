@@ -119,6 +119,13 @@ pnpm run check     # typecheck（含测试）→ build
 
 见 [CONTRIBUTING.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/CONTRIBUTING.md)。
 
+## Star 趋势
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/wings1848/dsh-mcp-lazy/output/star-history-dark.svg">
+  <img alt="Star 趋势图" src="https://raw.githubusercontent.com/wings1848/dsh-mcp-lazy/output/star-history-light.svg">
+</picture>
+
 ## 许可
 
 MIT，见 [LICENSE](https://github.com/wings1848/dsh-mcp-lazy/blob/main/LICENSE)。连接层与环境洗白规则改自 `@deepseek-ai/dsh-mcp-client`；单代理网关、
