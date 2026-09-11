@@ -61,6 +61,18 @@ const KNOWN_SERVER_FIELDS: ReadonlySet<string> = new Set([
   'debug',
 ])
 
+/** Plugin-level fields. Same job as `KNOWN_SERVER_FIELDS`, one level up. */
+const KNOWN_PLUGIN_FIELDS: ReadonlySet<string> = new Set([
+  'idleTimeout',
+  'freezeDirectTools',
+  'directTools',
+  'outputGuard',
+  'servers',
+  // Not in the schema: supplied directly by tests and SDK callers.
+  'idleWindowMs',
+  'failureBackoffMs',
+])
+
 /**
  * Fields that belong to `@deepseek-ai/dsh-mcp-client`, with what to do instead.
  *
@@ -80,8 +92,7 @@ const MCP_CLIENT_ONLY_FIELDS: ReadonlyMap<string, string> = new Map([
   ],
 ])
 
-const ServerSchema = z.object({
-  serverName: z.string().required().pattern(SERVER_NAME_PATTERN),
+const ServerSchema = z.object({  serverName: z.string().required().pattern(SERVER_NAME_PATTERN),
   transport: z.union([z.const('stdio'), z.const('streamable-http')]).required(),
   command: z.string(),
   args: z.array(String).default([]),
@@ -117,6 +128,14 @@ export const Config: z<Partial<ConfigShape>, ConfigShape> = z.object({
    */
   freezeDirectTools: z.boolean().default(false),
   /**
+   * Promotion default for every server. A server's own `directTools` wins.
+   *
+   * Exists because `pi-mcp-adapter` exposes the same thing as
+   * `settings.directTools`, and because "expose everything natively" should not
+   * require editing every server row.
+   */
+  directTools: z.union([z.boolean(), z.const('search')]).default(false),
+  /**
    * Output bounding. `true` (the default) applies the built-in ceilings; `false`
    * returns oversized results verbatim; an object tunes them.
    */
@@ -146,6 +165,27 @@ function resolveOutputGuard(value: ConfigShape['outputGuard']): OutputGuardConfi
     ...(value.enabled !== undefined ? { enabled: value.enabled } : {}),
     ...(value.maxBytes !== undefined ? { maxBytes: value.maxBytes } : {}),
     ...(value.maxLines !== undefined ? { maxLines: value.maxLines } : {}),
+  }
+}
+
+/**
+ * Reject plugin-level fields the plugin will never read.
+ *
+ * The server-level check cannot see these, and schemastery passes unknown
+ * top-level keys through exactly the same way — so a typo here, or a field
+ * carried over from `pi-mcp-adapter`'s settings block, would be accepted and
+ * then silently ignored.
+ *
+ * @param config - The raw configuration handed to `apply`.
+ */
+function assertPluginConfig(config: ConfigShape | undefined): void {
+  if (config === undefined || config === null) return
+  for (const field of Object.keys(config)) {
+    if (KNOWN_PLUGIN_FIELDS.has(field)) continue
+    throw new Error(
+      `mcp-lazy: unknown plugin-level field "${field}" — check the spelling. ` +
+        `Known fields: ${[...KNOWN_PLUGIN_FIELDS].join(', ')}`,
+    )
   }
 }
 
@@ -210,6 +250,7 @@ function assertServerConfig(servers: ConfigShape['servers'] | undefined): void {
  * @param config - Resolved gateway configuration.
  */
 export function apply(ctx: Context, config: ConfigShape): void {
+  assertPluginConfig(config)
   // A resolved config always carries both fields, but this entry is also called
   // directly by tests and by SDK users, so a partial object must not crash the
   // host's plugin load.
@@ -218,7 +259,9 @@ export function apply(ctx: Context, config: ConfigShape): void {
     servers: Array.isArray(config?.servers) ? config.servers : [],
     freezeDirectTools: config?.freezeDirectTools === true,
     outputGuard: config?.outputGuard ?? true,
+    ...(config?.directTools === undefined ? {} : { directTools: config.directTools }),
     ...(typeof config?.idleWindowMs === 'function' ? { idleWindowMs: config.idleWindowMs } : {}),
+    ...(config?.failureBackoffMs === undefined ? {} : { failureBackoffMs: config.failureBackoffMs }),
   }
   assertServerConfig(resolved.servers)
 

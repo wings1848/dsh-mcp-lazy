@@ -47,6 +47,7 @@ function twoServers(overrides: Partial<ServerEntry> = {}): ServerEntry[] {
 async function loadedRegistry(
   entries: ServerEntry[],
   catalogs: Record<string, ToolMetadata[]>,
+  extra: Partial<Config> = {},
 ): Promise<McpGatewayRegistry> {
   const connection = {
     connect: async (entry: ServerEntry) => ({ tools: catalogs[entry.serverName] ?? [] }),
@@ -55,7 +56,10 @@ async function loadedRegistry(
     isConnected: () => false,
     dispose: async () => undefined,
   }
-  const registry = new McpGatewayRegistry({ idleTimeout: 10, servers: entries }, connection)
+  const registry = new McpGatewayRegistry(
+    { idleTimeout: 10, servers: entries, ...extra },
+    connection,
+  )
   for (const entry of entries) await registry.ensureConnected(entry).catch(() => undefined)
   return registry
 }
@@ -237,6 +241,54 @@ describe("AC2b — directTools: 'search'", () => {
 
     assert.deepEqual(registrar.activateFromSearch('read_file'), ['alpha__read_file'])
     assert.deepEqual(registrar.activateFromSearch('read_file'), [])
+  })
+})
+
+describe('AC2b — plugin-level directTools default', () => {
+  it('promotes every server when the plugin default is true', async () => {
+    // pi-mcp-adapter exposes this as `settings.directTools`, so a configuration
+    // carried over from it expects to find one.
+    const registry = await loadedRegistry(twoServers(), CATALOGS, { directTools: true })
+    const { registrar, registered } = registrarFor(registry)
+
+    assert.deepEqual(registrar.sync().sort(), [
+      'alpha__read_file',
+      'alpha__write_file',
+      'beta__fetch_page',
+      'beta__search_docs',
+    ])
+    assert.equal(registered.size, 4)
+  })
+
+  it('lets one server opt out of the plugin default', async () => {
+    const entries = twoServers()
+    entries[0]!.directTools = false
+    const registry = await loadedRegistry(entries, CATALOGS, { directTools: true })
+    const { registrar } = registrarFor(registry)
+
+    assert.deepEqual(registrar.sync().sort(), ['beta__fetch_page', 'beta__search_docs'])
+  })
+
+  it('lets one server pick named promotion under a plugin default of true', async () => {
+    const entries = twoServers()
+    entries[0]!.directTools = ['read_*']
+    const registry = await loadedRegistry(entries, CATALOGS, { directTools: true })
+    const { registrar } = registrarFor(registry)
+
+    assert.deepEqual(registrar.sync().sort(), [
+      'alpha__read_file',
+      'beta__fetch_page',
+      'beta__search_docs',
+    ])
+  })
+
+  it("applies a plugin default of 'search' to every server", async () => {
+    const registry = await loadedRegistry(twoServers(), CATALOGS, { directTools: 'search' })
+    const { registrar, registered } = registrarFor(registry)
+
+    assert.deepEqual(registrar.sync(), [])
+    assert.equal(registered.size, 0)
+    assert.deepEqual(registry.searchModeServers().sort(), ['alpha', 'beta'])
   })
 })
 

@@ -42,6 +42,7 @@ top-level YAML array of loader patch entries; `id` is the row the patch layer ta
 |---|---|---|---|
 | `idleTimeout` | integer ≥ 0 | `10` | Idle-reap window in minutes for `lazy` servers that do not set their own; every other lifecycle defaults to `0`. `0` never reaps (`src/index.ts`, `src/schema.ts`, `src/registry.ts`). |
 | `freezeDirectTools` | boolean | `false` | Stop accepting new `directTools` promotions after the first sync pass (`src/index.ts`, `src/direct-tools.ts`). |
+| `directTools` | `true` \| `false` \| `'search'` | `false` | Promotion default for every server; a server's own `directTools` wins. See below (`src/index.ts`, `src/registry.ts`). |
 | `outputGuard` | `true` \| `false` \| `{ enabled, maxBytes, maxLines }` | `true` | Bound server-authored output; `true` applies the built-in ceilings, `false` returns oversized output verbatim (`src/index.ts`, `src/output-guard.ts`). |
 | `servers` | array of server entries | `[]` | The server list; an empty list is legal and means there is nothing to route to (`src/index.ts`). |
 
@@ -120,6 +121,30 @@ server (`src/direct-tools.ts`).
 | `true` | Every filtered tool of this server is registered as a native tool. |
 | `string[]` | Only matching tools are registered. Patterns are globs (`*`) matched case-insensitively against the tool's own name, the qualified name, and the tail after `__` (`src/naming.ts`, `src/registry.ts`). |
 | `'search'` | Tools are staged, not registered. `mcp({ search })` activates the ones it matches, and the search result names them (`src/direct-tools.ts`, `src/proxy-tool.ts`). |
+
+There is also a **plugin-level default** that applies to every server:
+
+```yaml
+- id: mcp-lazy
+  config:
+    directTools: true      # or 'search'; default false
+    servers: []
+```
+
+A server's own `directTools` wins over it, including `false` — that is how one server opts out
+of a plugin-wide `true`. This mirrors `settings.directTools` in `pi-mcp-adapter`, and it exists
+so that "expose everything natively" does not mean editing every server row. The list form
+stays per-server, because a list of names has no meaning across servers that do not share a
+catalog (`src/index.ts`, `src/registry.ts`).
+
+**Promotion needs a known catalog.** On a cold cache there is nothing to promote yet, so
+`directTools` registers nothing until the server has connected once and its tool list is
+cached. That is the same trade the rest of the plugin makes; it is worth knowing before
+concluding that the setting did not work.
+
+Setting `directTools: true` everywhere is what `@deepseek-ai/dsh-mcp-client` does
+unconditionally, which removes the reason this plugin exists. It is here for the servers where
+a native tool is genuinely worth moving the prefix, not as a default worth reaching for.
 
 **The consequence:** a promoted tool is a real tool in the request, so the tool-definition
 prefix changes and the prompt cache is invalidated from the first changed token

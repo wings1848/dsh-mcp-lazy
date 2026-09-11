@@ -212,6 +212,16 @@ describe('configuration validation at load time', () => {
     )
   })
 
+  it('rejects an unknown field at the plugin level too', () => {
+    // The server-level check does not see this, and schemastery passes unknown
+    // top-level keys through just the same. A typo here is otherwise silent.
+    const { ctx } = fakeContext()
+    assert.throws(
+      () => apply(ctx as never, { idleTimeout: 10, servers: [], idleTimout: 5 } as never),
+      /idleTimout/,
+    )
+  })
+
   it('accepts every field it claims to support', () => {
     // Guards KNOWN_SERVER_FIELDS against drifting away from ServerSchema. A
     // field added to the schema but not to the whitelist would be rejected by

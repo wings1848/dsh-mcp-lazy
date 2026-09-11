@@ -7,8 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A plugin-level `directTools` default (`true` or `'search'`), applied to every
+  server that does not set its own. `pi-mcp-adapter` exposes the same thing as
+  `settings.directTools`, so a configuration carried over from it now behaves
+  the same way, and "expose everything natively" no longer means editing every
+  server row. A server's own `directTools` still wins, including `false`, which
+  is how one server opts out of a plugin-wide `true` (`src/index.ts`,
+  `src/registry.ts`, `src/types.ts`).
+
 ### Fixed
 
+- Plugin-level fields the plugin does not implement were accepted and then
+  ignored, the same way server-level ones were. The server check cannot see
+  them, and schemastery passes unknown top-level keys through identically — so a
+  typo, or a `pi-mcp-adapter` settings key such as `settings`, resolved into a
+  config that looked right and did nothing. Both levels are checked now
+  (`src/index.ts`).
 - A server field the plugin does not implement was accepted and then ignored.
   schemastery passes unknown keys through untouched, so a configuration carried
   over from `@deepseek-ai/dsh-mcp-client` — which has `reconnect` and

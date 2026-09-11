@@ -114,6 +114,19 @@ export interface Config {
    */
   freezeDirectTools?: boolean
   /**
+   * Promotion default for every server, overridden per server.
+   *
+   * `true` registers every tool of every server natively; `'search'` registers
+   * them inactive until a search matches. A server's own `directTools` wins,
+   * including `false`, which is how one server opts out of a plugin-wide `true`.
+   *
+   * This mirrors `settings.directTools` in `pi-mcp-adapter`, so a configuration
+   * carried over from there behaves the same way. The list form
+   * (`directTools: string[]`) stays per-server, because a list of names has no
+   * meaning across servers that do not share a catalog.
+   */
+  directTools?: boolean | 'search'
+  /**
    * Bound server-authored output before it reaches the model.
    *
    * On by default: the gateway saves a few hundred tokens per request, and one

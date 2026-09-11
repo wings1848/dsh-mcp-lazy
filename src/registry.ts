@@ -220,6 +220,8 @@ export class McpGatewayRegistry {
   /** When each server last failed to start, for the retry backoff. */
   readonly #failedAt = new Map<string, number>()
   readonly #failureBackoffMs: number
+  /** Plugin-level `directTools`, used when a server does not set its own. */
+  readonly #globalDirectTools: boolean | 'search' | undefined
   #connection: GatewayConnection | undefined
   #cache: MetadataCache
 
@@ -233,6 +235,7 @@ export class McpGatewayRegistry {
     const globalIdle = config.idleTimeout ?? DEFAULT_IDLE_TIMEOUT_MINUTES
     this.#servers = config.servers.map(entry => resolveServer(entry, globalIdle))
     this.#failureBackoffMs = Math.max(0, config.failureBackoffMs ?? FAILURE_BACKOFF_MS)
+    this.#globalDirectTools = config.directTools
 
     const duplicates: string[] = []
     for (const server of this.#servers) {
@@ -748,7 +751,7 @@ export class McpGatewayRegistry {
   directToolSelections(): { serverName: string; tools: ToolMetadata[]; mode: 'all' | 'named' }[] {
     const out: { serverName: string; tools: ToolMetadata[]; mode: 'all' | 'named' }[] = []
     for (const server of this.#servers) {
-      const setting = server.entry.directTools
+      const setting = server.entry.directTools ?? this.#globalDirectTools
       if (setting === undefined || setting === false || setting === 'search') continue
       const known = this.#known.get(server.entry.serverName)
       if (known === undefined) continue
@@ -775,7 +778,7 @@ export class McpGatewayRegistry {
    */
   searchModeServers(): string[] {
     return this.#servers
-      .filter(server => server.entry.directTools === 'search')
+      .filter(server => (server.entry.directTools ?? this.#globalDirectTools) === 'search')
       .map(server => server.entry.serverName)
   }
 
