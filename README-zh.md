@@ -10,6 +10,8 @@
 **一个**工具，而不是 N 个 MCP 工具的 schema。服务器用到才启动、闲下来就回收，工具元数据落盘缓存
 —— 所以 `search` 和 `describe` 不启动任何进程。
 
+![一个工具而不是 N 个：原生注册每次请求都发送全部工具 schema 且所有服务器常驻；dsh-mcp-lazy 只发送一个恒定 schema，用到才启动服务器](https://raw.githubusercontent.com/wings1848/dsh-mcp-lazy/main/docs/assets/how-it-works.svg)
+
 ## 为什么
 
 `@deepseek-ai/dsh-mcp-client` 在启动时连接每一个配置的服务器，并把它们的全部工具注册成原生工具。

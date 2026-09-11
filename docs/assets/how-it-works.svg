@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 520" width="1000" height="520" role="img" aria-label="Before: every MCP tool schema is sent on every request and every server runs. After: one constant tool, servers start on first use and are reaped when idle. 92.8 percent less per request.">
+  <title>dsh-mcp-lazy — one tool instead of N</title>
+
+  <rect width="1000" height="520" fill="#0d1117"/>
+
+  <!-- ── title ─────────────────────────────────────────────────────────── -->
+  <text x="40" y="52" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="26" font-weight="600" fill="#e6edf3">One tool instead of N</text>
+  <text x="40" y="80" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="15" fill="#8b949e">The model-facing surface never changes. Servers start on first use and idle out again.</text>
+
+  <!-- ══ LEFT PANEL — before ════════════════════════════════════════════ -->
+  <rect x="40" y="108" width="440" height="322" rx="12" fill="#161b22" stroke="#30363d"/>
+  <text x="64" y="140" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#f85149" letter-spacing="0.6">NATIVE REGISTRATION</text>
+  <text x="64" y="160" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12" fill="#6e7681">@deepseek-ai/dsh-mcp-client</text>
+
+  <rect x="180" y="178" width="160" height="42" rx="8" fill="#1f2937" stroke="#4b5563"/>
+  <text x="260" y="204" text-anchor="middle" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#e6edf3">model</text>
+
+  <line x1="260" y1="220" x2="260" y2="240" stroke="#f85149" stroke-width="1.5"/>
+  <polygon points="260,246 255,236 265,236" fill="#f85149"/>
+  <text x="272" y="238" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="12" fill="#f85149">29 schemas · every request</text>
+
+  <rect x="72" y="252" width="376" height="74" rx="8" fill="#1c2128" stroke="#f85149" stroke-opacity="0.45"/>
+  <g fill="#f85149" fill-opacity="0.55">
+    <rect x="86" y="263" width="348" height="7" rx="2"/>
+    <rect x="86" y="276" width="316" height="7" rx="2"/>
+    <rect x="86" y="289" width="340" height="7" rx="2"/>
+    <rect x="86" y="302" width="288" height="7" rx="2"/>
+    <rect x="86" y="313" width="330" height="7" rx="2"/>
+  </g>
+
+  <text x="260" y="348" text-anchor="middle" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="12" fill="#8b949e">every one spawned at startup and kept resident</text>
+
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12" fill="#c9d1d9">
+    <rect x="72" y="362" width="116" height="38" rx="7" fill="#1c2128" stroke="#3fb950" stroke-opacity="0.5"/>
+    <circle cx="88" cy="381" r="4" fill="#3fb950"/>
+    <text x="100" y="386">server 1</text>
+    <rect x="202" y="362" width="116" height="38" rx="7" fill="#1c2128" stroke="#3fb950" stroke-opacity="0.5"/>
+    <circle cx="218" cy="381" r="4" fill="#3fb950"/>
+    <text x="230" y="386">server 2</text>
+    <rect x="332" y="362" width="116" height="38" rx="7" fill="#1c2128" stroke="#3fb950" stroke-opacity="0.5"/>
+    <circle cx="348" cy="381" r="4" fill="#3fb950"/>
+    <text x="360" y="386">server N</text>
+  </g>
+
+  <text x="260" y="420" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="15" fill="#f85149">21252 B ≈ 5313 tokens</text>
+
+  <!-- ══ RIGHT PANEL — after ════════════════════════════════════════════ -->
+  <rect x="520" y="108" width="440" height="322" rx="12" fill="#161b22" stroke="#30363d"/>
+  <text x="544" y="140" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#3fb950" letter-spacing="0.6">DSH-MCP-LAZY</text>
+  <text x="544" y="160" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12" fill="#6e7681">one gateway tool</text>
+
+  <rect x="660" y="178" width="160" height="42" rx="8" fill="#1f2937" stroke="#4b5563"/>
+  <text x="740" y="204" text-anchor="middle" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#e6edf3">model</text>
+
+  <line x1="740" y1="220" x2="740" y2="240" stroke="#3fb950" stroke-width="1.5"/>
+  <polygon points="740,246 735,236 745,236" fill="#3fb950"/>
+  <text x="752" y="238" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="12" fill="#3fb950">1 schema · constant</text>
+
+  <rect x="552" y="252" width="376" height="74" rx="8" fill="#12261a" stroke="#3fb950" stroke-opacity="0.6"/>
+  <text x="572" y="282" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="14" fill="#7ee787">mcp({ search | describe | tool })</text>
+  <text x="572" y="306" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="12" fill="#8b949e">11 parameters, byte-identical for any configuration</text>
+
+  <text x="740" y="348" text-anchor="middle" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="12" fill="#8b949e">spawned on first use, reaped once idle</text>
+
+  <rect x="552" y="362" width="176" height="38" rx="7" fill="#1c2128" stroke="#6e7681" stroke-dasharray="4 3"/>
+  <text x="572" y="386" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12" fill="#8b949e">cache.json</text>
+  <rect x="742" y="362" width="186" height="38" rx="7" fill="#1c2128" stroke="#6e7681" stroke-opacity="0.55"/>
+  <circle cx="762" cy="381" r="4" fill="#484f58"/>
+  <text x="774" y="386" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12" fill="#8b949e">server 1..N</text>
+  <text x="880" y="386" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12" fill="#6e7681">idle</text>
+
+  <text x="740" y="420" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="15" fill="#3fb950">1525 B ≈ 381 tokens</text>
+
+  <!-- ══ footer ═════════════════════════════════════════════════════════ -->
+  <line x1="40" y1="456" x2="960" y2="456" stroke="#21262d"/>
+  <text x="40" y="484" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#8b949e">Same model, same servers — measured against chrome-devtools-mcp@1.6.0 (29 tools).</text>
+  <text x="40" y="505" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12.5" fill="#6e7681">node scripts/measure-token-savings.mjs --npx &lt;your-server&gt;</text>
+
+  <rect x="666" y="466" width="294" height="36" rx="8" fill="#12261a" stroke="#3fb950" stroke-opacity="0.5"/>
+  <text x="813" y="490" text-anchor="middle" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#7ee787">−92.8% per request, and constant</text>
+</svg>

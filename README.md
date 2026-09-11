@@ -11,6 +11,8 @@ tool in front of the model instead of N MCP tool schemas: servers start on first
 out again, and their tool metadata is cached on disk so `search` and `describe` never spawn
 anything.
 
+![One tool instead of N: native registration sends every tool schema on every request and keeps every server resident; dsh-mcp-lazy sends one constant schema and starts servers on first use](https://raw.githubusercontent.com/wings1848/dsh-mcp-lazy/main/docs/assets/how-it-works.svg)
+
 ## Why
 
 `@deepseek-ai/dsh-mcp-client` connects every configured server at startup and registers every
