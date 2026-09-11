@@ -2,11 +2,9 @@ name: Star History
 
 on:
   schedule:
-    # GitHub stopped exposing stargazers to anyone but a repository's admins, so
-    # third-party star-history services can no longer read it. This renders the
-    # chart from the API with a token and publishes it to an `output` branch,
-    # which the README links to as a plain static file.
-    - cron: '0 0 * * *'
+    # Daily. The chart gains one point per run, so a missed day is a gap rather
+    # than a wrong number.
+    - cron: '17 3 * * *'
   workflow_dispatch:
 
 permissions:
@@ -17,16 +15,71 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  star-history:
-    name: render
+  render:
+    name: snapshot and render
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      # Pinned to an exact version rather than the moving `v2` tag. This action
-      # receives a token, and a third-party action handed a credential should be
-      # the version that was reviewed, not whatever `v2` points at tomorrow.
-      # Upgrading means changing this one line.
-      - uses: ranxi2001/star-history-ci@v2.0.0
-        with:
-          repos: ${{ github.repository }}
-          token: ${{ secrets.STAR_HISTORY_TOKEN }}
+
+      - name: read the current star count
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # The stargazers *list* answers 403 to this token -- it needs a
+          # personal credential, which is why every off-the-shelf star-history
+          # service asks for one. The *count* on the repository object is still
+          # readable here, so the chart is built from daily snapshots instead
+          # and needs no secret at all.
+          #
+          # The trade is that this cannot backfill. For a repository that
+          # already has stars that matters; for this one there is nothing to
+          # backfill, and not holding a credential is worth more.
+          stars=$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.stargazers_count')
+          echo "STARS=${stars}" >> "$GITHUB_ENV"
+          echo "current count: ${stars}"
+
+      - name: load the published history
+        run: |
+          set -euo pipefail
+          if git fetch --depth=1 origin output:refs/remotes/origin/output 2>/dev/null \
+             && git show origin/output:history.json > history.json 2>/dev/null; then
+            echo "resuming an existing series"
+          else
+            echo '[]' > history.json
+            echo "no output branch yet; starting a new series"
+          fi
+
+      - name: record today and draw
+        run: node .github/star-history/render.mjs history.json . --record "$STARS"
+
+      - name: publish to the output branch
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          # Stash the generated files before switching branches; the renderer
+          # lives on main and is not needed on the publishing branch.
+          mkdir -p /tmp/publish
+          cp history.json star-history-light.svg star-history-dark.svg /tmp/publish/
+
+          if git show-ref --verify --quiet refs/remotes/origin/output; then
+            git checkout -B output refs/remotes/origin/output
+          else
+            git checkout --orphan output
+            git rm -rf . >/dev/null 2>&1 || true
+          fi
+
+          cp /tmp/publish/history.json /tmp/publish/star-history-*.svg .
+          git add history.json star-history-light.svg star-history-dark.svg
+
+          if git diff --cached --quiet; then
+            echo "nothing changed today"
+            exit 0
+          fi
+
+          git commit -m "chore: star history for $(date -u +%Y-%m-%d)"
+          # Not a force push: the branch is append-only, so its history is worth
+          # keeping and a divergence here means something is wrong.
+          git push origin output
