@@ -172,6 +172,80 @@ describe('configuration validation at load time', () => {
     )
   })
 
+  it('rejects a field it does not implement instead of ignoring it', () => {
+    // A config carried over from @deepseek-ai/dsh-mcp-client can legitimately
+    // contain `reconnect` or `failOnStartupError`. schemastery passes unknown
+    // keys straight through, so without a check they land in the resolved
+    // config, nothing ever reads them, and the setting silently does nothing --
+    // the exact failure this project keeps having to fix.
+    const { ctx, registered } = fakeContext()
+    assert.throws(
+      () =>
+        apply(
+          ctx as never,
+          resolved([
+            {
+              serverName: 'ported',
+              transport: 'stdio',
+              command: 'node',
+              reconnect: { maxAttempts: 3 },
+            } as never,
+          ]),
+        ),
+      /reconnect/,
+    )
+    // A rejection must not leave a half-registered plugin behind.
+    assert.equal(registered.length, 0)
+  })
+
+  it('names a misspelled field rather than accepting it', () => {
+    const { ctx } = fakeContext()
+    assert.throws(
+      () =>
+        apply(
+          ctx as never,
+          resolved([
+            { serverName: 'typo', transport: 'stdio', command: 'node', idleTimout: 5 } as never,
+          ]),
+        ),
+      /idleTimout/,
+    )
+  })
+
+  it('accepts every field it claims to support', () => {
+    // Guards KNOWN_SERVER_FIELDS against drifting away from ServerSchema. A
+    // field added to the schema but not to the whitelist would be rejected by
+    // the check above, and nothing else in the suite would notice.
+    const { ctx, registered } = fakeContext()
+    assert.doesNotThrow(() =>
+      apply(
+        ctx as never,
+        resolved([
+          {
+            serverName: 'everything',
+            transport: 'stdio',
+            command: 'node',
+            args: ['a'],
+            env: { K: 'v' },
+            cwd: '/tmp',
+            url: 'http://127.0.0.1:1/mcp',
+            headers: { H: 'v' },
+            toolCallTimeoutMs: 1000,
+            lifecycle: 'eager',
+            idleTimeout: 5,
+            directTools: true,
+            includeTools: ['echo*'],
+            excludeTools: ['never'],
+            searchKeywords: { echo: ['kw'] },
+            disabled: false,
+            debug: true,
+          },
+        ]),
+      ),
+    )
+    assert.equal(registered.length, 1)
+  })
+
   it('does not register anything when configuration is rejected', () => {
     const { ctx, registered } = fakeContext()
     assert.throws(() => apply(ctx as never, resolved([{ serverName: 'x', transport: 'stdio' }])))

@@ -76,6 +76,11 @@ Restart the profile. Every field is documented in [docs/configuration.md](https:
 Migrating from `@deepseek-ai/dsh-mcp-client`: move each row's `config` into one entry of
 `servers` and drop the per-row `id`. The transport fields keep their meaning.
 
+Two of that plugin's fields are **not** implemented here — `reconnect` and `failOnStartupError`
+— and carrying them over is an error rather than a no-op, so the load fails with an
+explanation instead of leaving a setting that looks configured and does nothing. The same
+applies to a misspelled field name.
+
 ## What the model sees
 
 One tool, always the same 11 parameters:

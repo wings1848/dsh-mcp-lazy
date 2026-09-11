@@ -33,6 +33,53 @@ export const inject = ['tools']
 /** Accepted lifecycle modes, in the order the config catalog lists them. */
 const LIFECYCLES = ['lazy', 'lazy-keep-alive', 'eager', 'keep-alive'] as const
 
+/**
+ * Every field a server entry may carry.
+ *
+ * schemastery passes unknown keys through untouched, so this list is the only
+ * thing standing between a typo and a setting that silently does nothing. It
+ * has to be kept in step with `ServerSchema` below; `plugin-load.test.ts` fails
+ * if the two drift apart.
+ */
+const KNOWN_SERVER_FIELDS: ReadonlySet<string> = new Set([
+  'serverName',
+  'transport',
+  'command',
+  'args',
+  'env',
+  'cwd',
+  'url',
+  'headers',
+  'toolCallTimeoutMs',
+  'lifecycle',
+  'idleTimeout',
+  'directTools',
+  'includeTools',
+  'excludeTools',
+  'searchKeywords',
+  'disabled',
+  'debug',
+])
+
+/**
+ * Fields that belong to `@deepseek-ai/dsh-mcp-client`, with what to do instead.
+ *
+ * These are the ones a ported configuration is most likely to carry, and each
+ * needs a different answer, so a generic "unknown field" message would leave the
+ * reader to work it out. Silence is the one response that is never right: the
+ * field would sit in the resolved config looking configured.
+ */
+const MCP_CLIENT_ONLY_FIELDS: ReadonlyMap<string, string> = new Map([
+  [
+    'reconnect',
+    'dsh-mcp-lazy has no reconnect timer — a server that drops is restarted by the next call that needs it, and a server that fails to start is left alone for the failure-backoff window',
+  ],
+  [
+    'failOnStartupError',
+    'use lifecycle: "eager" with a server you require at startup, or leave it lazy and let the first call report the failure',
+  ],
+])
+
 const ServerSchema = z.object({
   serverName: z.string().required().pattern(SERVER_NAME_PATTERN),
   transport: z.union([z.const('stdio'), z.const('streamable-http')]).required(),
@@ -120,6 +167,22 @@ function assertServerConfig(servers: ConfigShape['servers'] | undefined): void {
       )
     }
     seen.add(entry.serverName)
+
+    // Reject anything the plugin will not read. schemastery hands unknown keys
+    // through, so a field carried over from dsh-mcp-client, or a typo, would
+    // otherwise be accepted and then ignored — indistinguishable from configured.
+    for (const field of Object.keys(entry)) {
+      if (KNOWN_SERVER_FIELDS.has(field)) continue
+      const instead = MCP_CLIENT_ONLY_FIELDS.get(field)
+      throw new Error(
+        instead === undefined
+          ? `mcp-lazy: server "${entry.serverName}" has an unknown field "${field}" — ` +
+            `check the spelling. Known fields: ${[...KNOWN_SERVER_FIELDS].join(', ')}`
+          : `mcp-lazy: server "${entry.serverName}" sets "${field}", which belongs to ` +
+            `@deepseek-ai/dsh-mcp-client and is not implemented here — ${instead}`,
+      )
+    }
+
     if (entry.transport === 'stdio' && (entry.command === undefined || entry.command === '')) {
       throw new Error(
         `mcp-lazy: server "${entry.serverName}" uses transport stdio but has no command`,

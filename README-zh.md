@@ -71,6 +71,10 @@ dsh plugin --profile <你的profile> add dsh-mcp-lazy
 从 `@deepseek-ai/dsh-mcp-client` 迁移：把每行的 `config` 塞进 `servers` 数组的一个条目里，去掉各自的
 `id`。传输层字段含义完全一致。
 
+有两个字段本插件**没有实现** —— `reconnect` 和 `failOnStartupError`。把它们一起搬过来会**报错**
+而不是被忽略，所以加载时会直接告诉你原因，而不是留下一个「看起来配了、其实没生效」的设置。
+字段名拼错同理。
+
 ## 模型看到的工具
 
 只有一个，11 个参数，永远不变：

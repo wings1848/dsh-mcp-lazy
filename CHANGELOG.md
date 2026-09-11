@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A server field the plugin does not implement was accepted and then ignored.
+  schemastery passes unknown keys through untouched, so a configuration carried
+  over from `@deepseek-ai/dsh-mcp-client` — which has `reconnect` and
+  `failOnStartupError`, neither of which exists here — resolved to a config that
+  looked correct and did nothing. A misspelled field name behaved the same way.
+  Both now fail at load. The two `dsh-mcp-client` fields get a message saying
+  what to use instead, because each needs a different answer; anything else is
+  reported as an unknown field alongside the list of real ones (`src/index.ts`).
+  Found by running the plugin against real MCP servers rather than the fixture:
+  a field that is accepted and ignored produces no symptom, so no test that
+  asserts behaviour could have caught it.
+
 ## [0.1.0] - 2026-09-11
 
 First public release. Requires Node.js `>=22.18.0` and is ESM only. There is one
