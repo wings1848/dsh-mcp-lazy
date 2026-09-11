@@ -33,3 +33,8 @@ coverage/
 # CI unpacks the npm tarball here to check the published entry actually imports
 .dist-check/
 *.tgz
+
+# CodeGraph's index. It carries its own .gitignore for the database, but the
+# directory would still show up as untracked, and a machine-local index has no
+# business in a published repository either way.
+.codegraph/

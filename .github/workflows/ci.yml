@@ -85,3 +85,23 @@ jobs:
       # is the MCP SDK, so a finding here is usually a transitive one worth
       # knowing about rather than a reason to rewrite the plugin.
       - run: pnpm audit --audit-level high
+
+  dependency-review:
+    name: dependency review
+    # Only meaningful on a pull request: it diffs the manifest against the base
+    # branch. There is nothing to compare on a push to main.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Complements `pnpm audit`, which reports what is vulnerable *now*. This
+      # reports what the pull request is *adding* -- a different question, and
+      # the one that stops a bad dependency at the door instead of after it
+      # lands.
+      - uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+          # A copyleft or unknown license arriving through a transitive
+          # dependency is worth a comment on the PR even though this project is
+          # permissive and MIT-derived.
+          comment-summary-in-pr: on-failure

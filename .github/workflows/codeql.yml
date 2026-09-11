@@ -1,0 +1,43 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly. A new query can find something in code that has not changed.
+    - cron: '23 5 * * 2'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: analyze (javascript-typescript)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Uploads the SARIF results to the Security tab. Without this the analysis
+      # runs and the findings go nowhere.
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          # `security-and-quality` adds maintainability queries on top of the
+          # default security set. On a codebase this size the extra noise is
+          # worth it, and findings land in the Security tab rather than failing
+          # the build.
+          queries: security-and-quality
+      # No build step: the JavaScript/TypeScript extractor reads the sources
+      # directly, and a build would only add a way for this to break.
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:javascript-typescript
