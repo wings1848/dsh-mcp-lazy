@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-11
+
 ### Added
 
 - `mcp({})` now reports when another mounted plugin is registering MCP
@@ -266,5 +268,6 @@ fail first — and fixed before this release:
   heavily cannot flood the model's context through an error message
   (`src/connection.ts`).
 
-[Unreleased]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/wings1848/dsh-mcp-lazy/releases/tag/v0.1.0
