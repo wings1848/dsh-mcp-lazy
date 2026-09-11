@@ -311,6 +311,41 @@ describe('status', () => {
     assert.match(text, /No MCP servers are configured/)
   })
 
+  it('warns when another plugin is registering the same servers natively', async () => {
+    // Both plugins work, nothing clashes, and the saving silently does not
+    // happen -- so the model has to be the one that notices and says so.
+    const registry = new McpGatewayRegistry(config([entry({ serverName: 'shared' })]))
+    const tool = createProxyTool(registry, undefined, undefined, ['shared', 'also-shared'])
+    const text = String(
+      await tool.execute({}, { signal: new AbortController().signal } as Parameters<
+        typeof tool.execute
+      >[1]),
+    )
+    assert.match(text, /shared, also-shared/)
+    assert.match(text, /dsh-mcp-client/)
+    assert.match(text, /saves nothing/)
+  })
+
+  it('says nothing about a conflict when there is none', async () => {
+    const registry = new McpGatewayRegistry(config([entry({ serverName: 'alone' })]))
+    const text = await run({}, registry)
+    assert.doesNotMatch(text, /dsh-mcp-client/)
+  })
+
+  it('still warns when no servers are configured here', async () => {
+    // The other plugin alone is the state a user lands in by configuring MCP in
+    // the wrong place, which is the case this exists for.
+    const registry = new McpGatewayRegistry(config([]))
+    const tool = createProxyTool(registry, undefined, undefined, ['orphaned'])
+    const text = String(
+      await tool.execute({}, { signal: new AbortController().signal } as Parameters<
+        typeof tool.execute
+      >[1]),
+    )
+    assert.match(text, /No MCP servers are configured/)
+    assert.match(text, /orphaned/)
+  })
+
   it('reports cached state, tool count, and the cache path', async () => {
     const registry = registryWith(entry({ serverName: 'status-demo' }))
     const text = await run({}, registry)

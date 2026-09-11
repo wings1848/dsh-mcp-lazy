@@ -168,6 +168,66 @@ function resolveOutputGuard(value: ConfigShape['outputGuard']): OutputGuardConfi
   }
 }
 
+/** The plugin this one is a drop-in replacement for. */
+const NATIVE_MCP_PLUGIN = '@deepseek-ai/dsh-mcp-client'
+
+/** The slice of a loader entry this plugin reads. */
+interface LoaderEntry {
+  disabled?: boolean
+  options?: {
+    name?: string
+    disabled?: boolean
+    config?: { serverName?: unknown }
+  }
+}
+
+/**
+ * Servers another mounted plugin is about to register as native tools.
+ *
+ * Those schemas enter every request as real tool definitions, which is the cost
+ * this plugin exists to remove — so both plugins serving the same servers is a
+ * configuration mistake worth naming. It is not a crash and not a name clash:
+ * this plugin's tool is `mcp` and the other's are `mcp__<server>__<tool>`, so
+ * nothing fails, the saving just quietly does not happen. That is exactly the
+ * kind of thing the model should be able to tell the user about.
+ *
+ * The loader is read *without* injecting it. `ctx.get` is documented to read a
+ * service "without the inject requirement" and to return `undefined` when it is
+ * not provided, so running outside a cordis host — the tests, an SDK caller —
+ * reports nothing rather than failing to load. That also means this cannot be
+ * the reason a plugin fails.
+ *
+ * This reads the declared entry tree rather than runtime state, so it does not
+ * depend on which plugin the loader happens to apply first.
+ *
+ * @param ctx - Plugin context.
+ * @returns The `serverName` of each enabled entry, or an empty list.
+ */
+function detectNativelyRegistered(ctx: Context): string[] {
+  const get = (ctx as { get?: (name: string) => unknown }).get
+  if (typeof get !== 'function') return []
+
+  let loader: unknown
+  try {
+    loader = get.call(ctx, 'loader')
+  } catch {
+    return []
+  }
+
+  const entries = (loader as { entries?: () => Iterable<unknown> } | undefined)?.entries
+  if (typeof entries !== 'function') return []
+
+  const names: string[] = []
+  for (const raw of entries.call(loader) as Iterable<LoaderEntry>) {
+    const options = raw?.options
+    if (options?.name !== NATIVE_MCP_PLUGIN) continue
+    if (raw.disabled === true || options.disabled === true) continue
+    const serverName = options.config?.serverName
+    names.push(typeof serverName === 'string' && serverName !== '' ? serverName : '(unnamed)')
+  }
+  return names
+}
+
 /**
  * Reject plugin-level fields the plugin will never read.
  *
@@ -308,6 +368,7 @@ export function apply(ctx: Context, config: ConfigShape): void {
       registry,
       (query, options) => direct.activateFromSearch(query, options),
       outputGuard,
+      detectNativelyRegistered(ctx),
     ),
   )
 

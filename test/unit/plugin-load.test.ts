@@ -386,3 +386,84 @@ describe('AC16 — the plugin unloads cleanly', () => {
     assert.equal(starts, 0, 'load and unload alone must never spawn a server')
   })
 })
+
+describe('conflict with @deepseek-ai/dsh-mcp-client', () => {
+  /** A context whose `get('loader')` returns the given entry list. */
+  function contextWithLoader(entries: unknown[]): {
+    ctx: FakeContext & { get: (name: string) => unknown }
+    registered: ToolDefinition[]
+  } {
+    const { ctx, registered } = fakeContext()
+    return {
+      ctx: { ...ctx, get: (name: string) => (name === 'loader' ? { entries: () => entries } : undefined) },
+      registered,
+    }
+  }
+
+  /** Run the proxy tool and return its text. */
+  async function statusOf(registered: ToolDefinition[]): Promise<string> {
+    const tool = registered[0]!
+    return String(
+      await tool.execute({}, { signal: new AbortController().signal } as Parameters<
+        typeof tool.execute
+      >[1]),
+    )
+  }
+
+  const client = (serverName: string, disabled = false): unknown => ({
+    options: { name: '@deepseek-ai/dsh-mcp-client', config: { serverName }, disabled },
+  })
+
+  it('names the servers the other plugin will register natively', async () => {
+    const { ctx, registered } = contextWithLoader([client('shared'), client('also-shared')])
+    apply(ctx as never, resolved([]))
+
+    const text = await statusOf(registered)
+    assert.match(text, /shared, also-shared/)
+    assert.match(text, /dsh-mcp-client/)
+  })
+
+  it('ignores entries the other plugin has disabled', async () => {
+    const { ctx, registered } = contextWithLoader([client('live'), client('off', true)])
+    apply(ctx as never, resolved([]))
+
+    const text = await statusOf(registered)
+    assert.match(text, /live/)
+    assert.doesNotMatch(text, /off/)
+  })
+
+  it('ignores unrelated plugin entries', async () => {
+    const { ctx, registered } = contextWithLoader([
+      { options: { name: '@deepseek-ai/dsh-mcp-client' } },
+      { options: { name: 'dsh-better-sidebar' } },
+    ])
+    apply(ctx as never, resolved([]))
+
+    // No serverName in the config, so the entry is still counted -- but the
+    // unrelated one must not be.
+    const text = await statusOf(registered)
+    assert.doesNotMatch(text, /dsh-better-sidebar/)
+  })
+
+  it('says nothing when no other plugin is mounted', async () => {
+    const { ctx, registered } = fakeContext()
+    apply(ctx as never, resolved([]))
+    assert.doesNotMatch(await statusOf(registered), /dsh-mcp-client/)
+  })
+
+  it('survives a context with no loader service at all', () => {
+    // The ordinary case for tests and SDK callers: `get` missing, or returning
+    // undefined. Detecting a conflict must never be why a plugin fails to load.
+    const { ctx } = fakeContext()
+    assert.doesNotThrow(() => apply(ctx as never, resolved([])))
+
+    const { ctx: throwing } = fakeContext()
+    const hostile = {
+      ...throwing,
+      get: () => {
+        throw new Error('no loader here')
+      },
+    }
+    assert.doesNotThrow(() => apply(hostile as never, resolved([])))
+  })
+})

@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `mcp({})` now reports when another mounted plugin is registering MCP
+  servers natively. `@deepseek-ai/dsh-mcp-client` turns every MCP tool into a
+  real tool definition, so when both plugins serve the same servers nothing
+  fails and the saving silently does not happen -- the one failure mode with no
+  symptom to notice. The status line names the servers and tells the model to
+  say so, which is the only channel that reaches the user. Detection reads the
+  loader without injecting it, so running outside a cordis host reports nothing
+  rather than failing, and it reads the declared entry tree rather than runtime
+  state, so it does not depend on which plugin loads first (`src/index.ts`,
+  `src/proxy-tool.ts`).
 - A plugin-level `directTools` default (`true` or `'search'`), applied to every
   server that does not set its own. `pi-mcp-adapter` exposes the same thing as
   `settings.directTools`, so a configuration carried over from it now behaves

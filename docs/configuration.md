@@ -214,6 +214,16 @@ per-row `id` goes away. The transport fields keep their meaning (`src/types.ts`,
 `cordis.patch.yml`): `serverName`, `transport`, `command`, `args`, `env`, `cwd`, `url`,
 `headers`, `toolCallTimeoutMs`.
 
+Two of that plugin's fields are **not** implemented here — `reconnect` and
+`failOnStartupError` — and carrying them over is an error rather than a no-op, so that a
+setting cannot sit in the configuration looking applied while nothing reads it.
+
+**Running both plugins is not an error, and that is the problem.** Nothing clashes: this
+plugin's tool is `mcp` and the other's are `mcp__<server>__<tool>`, so both load, both work,
+and the schemas this plugin exists to remove are sent anyway. Because there is no symptom,
+`mcp({})` names the servers it found configured on the other plugin and asks the model to
+pass that on. Disable the other plugin's rows, or move them here, to get the saving back.
+
 ```yaml
 # before: one row per server
 - id: mcp-github

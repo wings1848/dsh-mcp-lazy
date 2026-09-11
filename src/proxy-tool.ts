@@ -125,9 +125,32 @@ function renderToolResult(toolName: string, result: unknown): string {
  * @param cachePath - Where the metadata cache lives.
  * @returns Text for the model.
  */
-function renderStatus(servers: readonly ServerStatus[], cachePath: string): string {
+function renderStatus(
+  servers: readonly ServerStatus[],
+  cachePath: string,
+  nativeServers: readonly string[] = [],
+): string {
+  // Named first and unconditionally: it is the only line here that describes a
+  // problem with the *configuration* rather than with a server, and it silently
+  // cancels the reason the plugin was installed.
+  const conflict =
+    nativeServers.length === 0
+      ? []
+      : [
+          '',
+          `⚠ ${nativeServers.length} server${nativeServers.length === 1 ? '' : 's'} ` +
+            `(${nativeServers.join(', ')}) ${nativeServers.length === 1 ? 'is' : 'are'} also ` +
+            'configured in @deepseek-ai/dsh-mcp-client, which registers every MCP tool as a ' +
+            'native tool. Both plugins now work, but those schemas enter every request ' +
+            'anyway, so this gateway saves nothing for them. Tell the user, and move those ' +
+            'servers here (or disable them there) to get the saving back.',
+        ]
+
   if (servers.length === 0) {
-    return 'No MCP servers are configured. Add entries under this plugin\'s `servers` config, then start a new session.'
+    return [
+      'No MCP servers are configured. Add entries under this plugin\'s `servers` config, then start a new session.',
+      ...conflict,
+    ].join('\n')
   }
 
   // A server with no catalog and no cache is the one state the model cannot
@@ -172,6 +195,7 @@ function renderStatus(servers: readonly ServerStatus[], cachePath: string): stri
     '',
     `Metadata cache: ${cachePath}`,
     hint,
+    ...conflict,
   ].join('\n')
 }
 
@@ -272,6 +296,7 @@ async function executeProxy(
   signal: AbortSignal | undefined,
   activateDirectTools?: SearchActivationHook,
   outputGuard?: OutputGuard,
+  nativeServers: readonly string[] = [],
 ): Promise<string> {
   if (args.search !== undefined) {
     const options: { regex?: boolean; includeSchemas?: boolean; limit?: number; offset?: number } = {}
@@ -378,7 +403,7 @@ async function executeProxy(
     }
   }
 
-  return renderStatus(registry.status(), registry.cachePath)
+  return renderStatus(registry.status(), registry.cachePath, nativeServers)
 }
 
 /**
@@ -405,6 +430,7 @@ export function createProxyTool(
   registry: McpGatewayRegistry,
   activateDirectTools?: SearchActivationHook,
   outputGuard?: OutputGuard,
+  nativeServers: readonly string[] = [],
 ): ToolDefinition {
   return defineTool({
     name: PROXY_TOOL_NAME,
@@ -415,7 +441,14 @@ export function createProxyTool(
       render: (_args, value) => [{ type: 'text', text: String(value) }],
     },
     async execute(args, exec) {
-      return executeProxy(args as ProxyArgs, registry, exec.signal, activateDirectTools, outputGuard)
+      return executeProxy(
+        args as ProxyArgs,
+        registry,
+        exec.signal,
+        activateDirectTools,
+        outputGuard,
+        nativeServers,
+      )
     },
     timeoutMs: 300_000,
   })
