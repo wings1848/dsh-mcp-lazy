@@ -85,7 +85,10 @@ jobs:
             $0 ~ "^## \\[" v "\\]" { capture = 1; next }
             capture && /^## \[/ { exit }
             capture { print }
-          ' CHANGELOG.md | sed '/^\[.*\]:/d')
+          # Drop the link definitions Keep a Changelog keeps at the bottom, then
+          # the blank line between the version heading and the first section —
+          # otherwise the release page opens with a gap.
+          ' CHANGELOG.md | sed '/^\[.*\]:/d' | sed '/./,$!d')
 
           if [ -n "$(printf '%s' "$notes" | tr -d '[:space:]')" ]; then
             printf '%s\n' "$notes" > /tmp/notes.md
