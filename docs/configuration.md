@@ -68,7 +68,47 @@ top-level YAML array of loader patch entries; `id` is the row the patch layer ta
 | `debug` | boolean | `false` | Forward the stdio child's stderr to the host instead of capturing it (`src/connection.ts`). |
 
 A duplicate `serverName`, a `stdio` entry with no `command`, and a `streamable-http` entry
-with no `url` throw at load (`src/index.ts`).
+with no `url` throw at load (`src/index.ts`). So does any field name the plugin does not know —
+including a `dsh-mcp-client` field carried over by mistake — because a setting that is accepted
+and then ignored is indistinguishable from one that works.
+
+## Secrets
+
+A server that needs a token usually needs it inside `args` or `headers`, which puts it in the
+config file. The loader's `!!js` tag avoids that: it evaluates a JavaScript expression when the
+entry is applied, and `process` is in scope.
+
+```yaml
+servers:
+  - serverName: remote-browser
+    transport: stdio
+    command: npx
+    # Disabled until the credential exists, so a half-configured server is
+    # skipped rather than attempted and failed.
+    disabled: !!js "!process.env.CF_TOKEN"
+    args: !!js "['-y', 'chrome-devtools-mcp@latest', '--wsHeaders=' + JSON.stringify({ Authorization: 'Bearer ' + (process.env.CF_TOKEN ?? '') })]"
+```
+
+Then put the value in the environment, not the file:
+
+```fish
+set -Ux CF_TOKEN 'cfut_...'      # fish; use the equivalent for your shell
+```
+
+Three things about `!!js` are worth knowing before writing one, all of them verified against the
+loader rather than inferred:
+
+- **It applies to scalars only.** The tag is registered as `kind: "scalar"`, so
+  `args: !!js ['-y', 'pkg']` fails to parse — a flow sequence is not a scalar. Write the
+  expression as a quoted scalar that *evaluates to* the array, as above.
+- **An expression starting with `!` has to be quoted.** `disabled: !!js !process.env.X` is a
+  YAML error ("duplication of a tag property"); `disabled: !!js "!process.env.X"` is not.
+- **`disabled` is evaluated, and the plugin receives a boolean.** The loader documents this
+  ("Effective disabled state: a `!!js` expression evaluates against the loader context"), which
+  is what makes the auto-disable pattern above work.
+
+`--dump-config` prints the expression verbatim rather than its value — it composes the tree, it
+does not apply it. To see what an expression resolves to, start the profile.
 
 ## Transports
 

@@ -117,7 +117,7 @@ mcp({})                                # 状态：工具数 / 连接态 / 缓存
 
 ```bash
 pnpm install
-pnpm test          # 构建 → 重链 peer 包 → 179 个用例
+pnpm test          # 构建 → 重链 peer 包 → 195 个用例
 pnpm run check     # typecheck（含测试）→ build
 ```
 

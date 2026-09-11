@@ -66,6 +66,7 @@
 | 搜索默认/分页 | limit 默认 12，offset 0 | 同 | ✅ |
 | `searchKeywords` | 仅影响排序，不入 schema/描述/缓存 | 同 | ✅ |
 | `directTools` | `boolean \| string[] \| "search"` | 同 | ✅ |
+| 全局 `directTools` | `settings.directTools`：`boolean \| "search"`，每台的设置优先 | 同（插件级 `Config.directTools`），每台的优先，含 `false` 退出 | ✅ v0.1.1 补上；此前只有每台的形式 |
 | `'search'` 语义 | 真 schema 但 inactive，`mcp({search})` 命中才激活 | 同 | ✅ |
 | `freezeDirectTools` | 首次同步后冻结提升，保 prompt 前缀 | 同 | ✅ |
 | 启动期零 I/O | 加载只读配置+缓存，不连接（`index.ts:254-257`） | 同（`apply()` 无 I/O，AC16 断言） | ✅ |

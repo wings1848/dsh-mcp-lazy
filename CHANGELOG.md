@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Documentation: three files still said 179 tests where the suite had grown to
+  195, and none of them explained how to configure a server that needs a token.
+  `docs/configuration.md` now has a Secrets section covering the `!!js` +
+  environment-variable pattern, including the three things about `!!js` that
+  cost time to discover: it applies to scalars only, an expression starting with
+  `!` must be quoted, and `disabled` is evaluated before the plugin sees it.
+
 ## [0.1.1] - 2026-09-11
 
 ### Added
