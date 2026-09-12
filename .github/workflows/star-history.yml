@@ -42,28 +42,38 @@ jobs:
       - name: load the published history
         run: |
           set -euo pipefail
+          # Everything the renderer reads or writes lives outside the checkout,
+          # on purpose. The publishing branch tracks files at these same paths,
+          # and a branch switch refuses to overwrite untracked files in the
+          # working tree -- which is exactly how the first two scheduled runs
+          # failed. Keeping the working tree pristine removes the whole class of
+          # failure, not just the three filenames that happened to trigger it.
+          out="${RUNNER_TEMP}/star-history"
+          mkdir -p "$out"
           if git fetch --depth=1 origin output:refs/remotes/origin/output 2>/dev/null \
-             && git show origin/output:history.json > history.json 2>/dev/null; then
+             && git show origin/output:history.json > "$out/history.json" 2>/dev/null; then
             echo "resuming an existing series"
           else
-            echo '[]' > history.json
+            echo '[]' > "$out/history.json"
             echo "no output branch yet; starting a new series"
           fi
 
       - name: record today and draw
-        run: node .github/star-history/render.mjs history.json . --record "$STARS"
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/star-history"
+          node .github/star-history/render.mjs "$out/history.json" "$out" --record "$STARS"
 
       - name: publish to the output branch
         run: |
           set -euo pipefail
+          out="${RUNNER_TEMP}/star-history"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
-          # Stash the generated files before switching branches; the renderer
-          # lives on main and is not needed on the publishing branch.
-          mkdir -p /tmp/publish
-          cp history.json star-history-light.svg star-history-dark.svg /tmp/publish/
-
+          # Switch branches first, while the working tree is still untouched:
+          # there is nothing to stash, so there is nothing for the checkout to
+          # refuse. The renderer lives on main and is not needed here.
           if git show-ref --verify --quiet refs/remotes/origin/output; then
             git checkout -B output refs/remotes/origin/output
           else
@@ -71,7 +81,7 @@ jobs:
             git rm -rf . >/dev/null 2>&1 || true
           fi
 
-          cp /tmp/publish/history.json /tmp/publish/star-history-*.svg .
+          cp "$out/history.json" "$out"/star-history-*.svg .
           git add history.json star-history-light.svg star-history-dark.svg
 
           if git diff --cached --quiet; then
