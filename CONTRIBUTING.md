@@ -61,7 +61,8 @@ All of these come from `package.json` `scripts`.
 | `pnpm typecheck` | The same project with `--noEmit` — type errors only, no output. |
 | `pnpm test` | `node --test "test/unit/*.test.ts"`. Runs `pretest` first (build, then `link-dsh`). 305 tests in 73 suites (`README.md`, `docs/design/parity-pi-mcp-adapter.md`). |
 | `pnpm test:types` | `tsc -p tsconfig.test.json` — type-checks the test sources as well, which `typecheck` does not cover. |
-| `pnpm check` | `typecheck` then `test:types` then `build`. Run this before opening a pull request. |
+| `pnpm check` | `typecheck` then `lint` then `build` then `test:types`, in that order. Run this before opening a pull request; CI runs the same command. |
+| `pnpm lint` | `oxlint src scripts test` (config: `.oxlintrc.json`), then `node scripts/check-style.mjs` for the rules in `.editorconfig` that oxlint does not implement — the 100-column limit, LF endings, trailing whitespace, final newline. |
 | `pnpm link-dsh` | `node scripts/link-dsh.mjs` — symlinks the four peer packages from the running DSH installation into `node_modules`. |
 | `pnpm measure:surface` | `node scripts/measure-surface.mjs` — prints the constant model-facing surface: tool name, parameter count, wire bytes, approximate tokens. An optional server count adds a line stating that those servers cost nothing further per request. |
 | `pnpm measure:savings` | `node scripts/measure-token-savings.mjs` — starts a real MCP server (a bundled fixture by default, or `--npx <package> [args]`), renders what native registration of its tools would cost, and reports the ratio against this plugin's fixed cost. |
@@ -71,8 +72,9 @@ even though `lib/` is gitignored.
 
 ## Code conventions
 
-These are enforced by `tsc` (`tsconfig.json`), not by a linter — no linter or
-formatter is configured in this repository.
+Most of these are enforced by `tsc` (`tsconfig.json`). Formatting is enforced by
+`pnpm lint`, which is `oxlint` plus `scripts/check-style.mjs` — there is no
+formatter, so match the surrounding code rather than reformatting a file.
 
 - `strict` and `noUncheckedIndexedAccess` are on. Indexed access yields
   `T | undefined`; handle it rather than asserting it away.
@@ -85,7 +87,8 @@ formatter is configured in this repository.
   imports carry an explicit `.js` extension in the `.ts` source, e.g.
   `import { LazyConnections } from './connection.js'`.
 - Formatting follows `.editorconfig`: UTF-8, LF, two-space indent, 100-column
-  soft maximum, final newline. Match the surrounding code.
+  maximum, final newline. `scripts/check-style.mjs` fails a *new* offender; the
+  files that predate the check are listed inside it and warn instead.
 - `src/schema.ts` defines the one model-facing tool and its 11 parameters. Any
   edit there changes the fixed per-request cost. Tests assert that the surface
   stays constant, and `pnpm measure:surface` prints the current numbers; if a
@@ -151,16 +154,18 @@ included — set `debug: true` on that server entry to forward it to your termin
 
 Maintainers only.
 
-1. Move the `## [Unreleased]` entries in `CHANGELOG.md` under a new version
-   heading, and update the links at the bottom of that file.
+1. Add a `## [<version>] - <date>` heading at the top of `CHANGELOG.md` for the
+   entries that were not released yet, then update the link definitions at the
+   bottom of that file: give the new version its own `[x.y.z]` link, and repoint
+   `[Unreleased]` at `compare/v<version>...HEAD`.
 2. Set the same version in `package.json`. The release workflow refuses to publish
    when the tag and `package.json` disagree, so this is enforced rather than
    remembered.
 3. Commit, then tag and push:
 
    ```bash
-   git tag v0.2.0
-   git push origin v0.2.0
+   git tag v0.3.0
+   git push origin v0.3.0
    ```
 
 4. `.github/workflows/release.yml` re-runs `pnpm run check` and `pnpm test`, then
