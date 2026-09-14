@@ -36,6 +36,7 @@ import {
 } from '../../lib/metadata-cache.js'
 import { McpGatewayRegistry } from '../../lib/registry.js'
 import type { GatewayConnection, LiveToolCatalog } from '../../lib/registry.js'
+import { DEFAULT_CACHE_MAX_AGE_MS } from '../../lib/schema.js'
 import type { Config, ServerEntry, ToolMetadata } from '../../lib/types.js'
 
 /** The exact rejection the connection layer produces for caller cancellation. */
@@ -330,27 +331,65 @@ describe('cross-process cache merging', () => {
     )
   })
 
-  it('drops entries for servers that are no longer configured', async () => {
+  it('keeps the catalog of a second profile that shares the cache file', async () => {
+    // Two profiles (`dsh --profile web`, `dsh --profile cli`) have different
+    // server lists but one `$DSH_HOME`, and the cache path carries no profile
+    // segment — so neither process may treat the other's servers as deleted.
+    // Both are constructed before either connects, which is the case a real
+    // pair of long-running processes is in.
     const alpha = stdioEntry('alpha')
     const beta = stdioEntry('beta')
     const connection = stubConnection(async entry => ({
       tools: [tool(`${entry.serverName}-tool`)],
     }))
-    const registry = new McpGatewayRegistry(configFor(alpha, beta), connection)
-    await registry.ensureConnected(alpha)
+    const web = new McpGatewayRegistry(configFor(alpha), connection)
+    const cli = new McpGatewayRegistry(configFor(beta), connection)
 
-    const disk = loadMetadataCache() ?? { version: CACHE_VERSION, servers: {} }
-    disk.servers['beta'] = buildCacheEntry(beta, [tool('beta-tool')], undefined)
-    disk.servers['ghost'] = buildCacheEntry(stdioEntry('ghost'), [tool('ghost-tool')], undefined)
-    saveMetadataCache(disk)
-
-    await registry.ensureConnected(alpha)
+    await web.ensureConnected(alpha)
+    await cli.ensureConnected(beta)
 
     assert.deepEqual(
       Object.keys(loadMetadataCache()?.servers ?? {}).sort(),
       ['alpha', 'beta'],
-      'a removed server must not leave its catalog behind forever',
+      "a save must not delete an entry its own configuration cannot judge",
     )
+  })
+
+  it('prunes only entries that have aged out for every reader', async () => {
+    const alpha = stdioEntry('alpha')
+    const connection = stubConnection(async entry => ({
+      tools: [tool(`${entry.serverName}-tool`)],
+    }))
+    const registry = new McpGatewayRegistry(configFor(alpha), connection)
+    await registry.ensureConnected(alpha)
+
+    const disk = loadMetadataCache() ?? { version: CACHE_VERSION, servers: {} }
+    disk.servers['aged-out'] = buildCacheEntry(
+      stdioEntry('aged-out'),
+      [tool('aged-out-tool')],
+      undefined,
+      Date.now() - DEFAULT_CACHE_MAX_AGE_MS - 1000,
+    )
+    disk.servers['other-profile'] = buildCacheEntry(
+      stdioEntry('other-profile'),
+      [tool('other-profile-tool')],
+      undefined,
+    )
+    saveMetadataCache(disk)
+
+    await registry.ensureConnected(alpha)
+
+    const after = loadMetadataCache()
+    assert.equal(
+      after?.servers['aged-out'],
+      undefined,
+      'an entry past the age bound is unusable to every reader, so it may go',
+    )
+    assert.ok(
+      after?.servers['other-profile'],
+      'a fresh entry this configuration cannot judge may belong to another profile',
+    )
+    assert.ok(after?.servers['alpha'])
   })
 })
 
