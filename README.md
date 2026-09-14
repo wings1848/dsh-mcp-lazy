@@ -89,6 +89,18 @@ dsh-mcp-lazy-adopt                 # dry run: prints the plan, writes nothing
 dsh-mcp-lazy-adopt --write         # applies it, with a timestamped backup of each file
 ```
 
+Or, without leaving the session, as a slash command:
+
+```
+/mcp-adopt                         # dry run
+/mcp-adopt apply                   # writes
+```
+
+The command drives the same CLI, so the plan, the backups and the write are one code path; a
+successful `apply` is followed by a re-plan whose result is shown to you, so the answer to "did
+it work?" is evidence rather than an assurance. It still requires the human to type it: nothing
+runs at plugin startup.
+
 It reads what is *actually* mounted (`dsh --profile <p> --dump-config`, so all four patch layers
 are composed), marks each original row `disabled: true` **in place**, and appends the server to
 this plugin's `servers` list. Nothing else in the file is touched — comments, blank lines and
@@ -96,6 +108,20 @@ this plugin's `servers` list. Nothing else in the file is touched — comments, 
 with a reason instead of being guessed at. Run it while the host is stopped: the web profile
 reloads its patch layer live, and `dsh-config-manager` rewrites the same file from its own
 state.
+
+**Check the blast radius before you apply.** The native row usually lives in the *home* patch,
+which every profile reads, while this plugin's row lives in one profile's patch. Disabling the
+former therefore takes that server away from every other profile as well — and those profiles
+have no gateway to receive it, so they simply lose the capability. The plan names them:
+
+```
+  ⚠ the row being disabled lives in the home layer ~/.dsh/cordis.patch.yml, which every profile reads.
+    3 other profile(s) do not mount dsh-mcp-lazy, so they would lose codegraph with no replacement:
+    default, dsh-tui, headless.
+    Mount dsh-mcp-lazy in those profiles, or move the row into web's own layer, if they need it.
+```
+
+If any of them need the server, mount this plugin there too (or move the row) before applying.
 
 A server that does move arrives with only the fields this plugin implements. Two of the other
 plugin's fields are **not** implemented here — `reconnect` and `failOnStartupError` — and
@@ -127,6 +153,7 @@ mcp({})                                # status: tool count, connection state, c
 | [docs/development.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/development.md) | build, test, why `link-dsh` is mandatory |
 | [docs/design/plan.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/plan.md) | implementation plan and acceptance criteria |
 | [docs/design/adopt-native-rows.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/adopt-native-rows.md) | the `adopt` command: design, invariants, acceptance criteria, and what implementing it turned up |
+| [docs/design/mcp-adopt-command.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/mcp-adopt-command.md) | the `/mcp-adopt` slash command, and the adversarial review that changed it |
 | [docs/design/parity-pi-mcp-adapter.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/parity-pi-mcp-adapter.md) | module-by-module audit against `pi-mcp-adapter` v2.33.0 |
 
 ## Known limitations
@@ -153,7 +180,7 @@ The v1 boundary, stated plainly:
 
 ```bash
 pnpm install
-pnpm test          # builds, relinks the peer packages, runs 277 tests
+pnpm test          # builds, relinks the peer packages, runs 305 tests
 pnpm run check     # typecheck (sources and tests) then build
 ```
 

@@ -10,6 +10,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import { registerAdoptCommand } from './command.js'
 import { LazyConnections } from './connection.js'
 import { DirectToolRegistrar } from './direct-tools.js'
 import { qualifiedToolName } from './naming.js'
@@ -403,6 +404,13 @@ export function apply(ctx: Context, config: ConfigShape): void {
   for (const entry of registry.residentServers()) {
     void registry.ensureConnected(entry, activation.signal).catch(() => {})
   }
+
+  // The human half: `/mcp-adopt`, so the move `renderStatus` reports as needed
+  // can be made without leaving the GUI. It is reached through `ctx.inject`,
+  // never through this plugin's own `inject` list — waiting for a command
+  // registry would leave the model-facing tool unregistered on any composition
+  // that has none, which is the one regression this plugin must never ship.
+  registerAdoptCommand(ctx)
 
   ctx.effect(
     () => () => {

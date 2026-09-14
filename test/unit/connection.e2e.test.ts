@@ -935,6 +935,9 @@ describe('M9 — activation connects only what asked to be resident', () => {
       effect: (callback: () => () => void) => {
         disposers.push(callback())
       },
+      // The command registry is optional, so this fake never delivers it — which
+      // is also the case that matters: the gateway has to activate regardless.
+      inject: () => ({}),
     }
 
     apply(ctx as never, {
@@ -972,6 +975,9 @@ describe('M9 — activation connects only what asked to be resident', () => {
       effect: (callback: () => () => void) => {
         disposers.push(callback())
       },
+      // The command registry is optional, so this fake never delivers it — which
+      // is also the case that matters: the gateway has to activate regardless.
+      inject: () => ({}),
     }
 
     apply(ctx as never, { idleTimeout: 10, servers: [adopted.entry, dropped.entry] } as never)

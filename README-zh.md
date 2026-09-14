@@ -82,11 +82,34 @@ dsh-mcp-lazy-adopt                 # 干跑：只打印计划，什么都不写
 dsh-mcp-lazy-adopt --write         # 落盘，每个文件先留一份带时间戳的备份
 ```
 
+不想离开会话的话，也可以用 slash 命令：
+
+```
+/mcp-adopt                         # 干跑
+/mcp-adopt apply                   # 落盘
+```
+
+命令驱动的是同一个 CLI，所以计划、备份、写入只有一条代码路径；`apply` 成功后会自动**再跑一次干跑**
+并把结果贴给你，「到底生效了没有」是证据而不是保证。它仍然要人敲一下 —— 插件启动时什么都不做。
+
 它读的是**实际挂载了什么**（`dsh --profile <p> --dump-config`，四层 patch 全部组合过），
 把原来的行**就地**标成 `disabled: true`，再把服务器追加进本插件的 `servers` 列表。文件里**别的字节
 一个不动** —— 注释、空行、`!!js` 表达式全部逐字节保留；搬不动的行会给出**原因**而不是靠猜。
 请在宿主**停机时**执行：web profile 的 patch 层是热重载的，而 `dsh-config-manager` 也会整份重写
 同一个文件。
+
+**动手前先看影响面。** native 行通常住在 **home 层**（每个 profile 都读），而本插件的行只在一个
+profile 的层里。所以禁用前者会**顺手把服务器从其它 profile 手里拿走**，而那些 profile 根本没挂本插件，
+只会静默失去能力。计划会点名它们：
+
+```
+  ⚠ the row being disabled lives in the home layer ~/.dsh/cordis.patch.yml, which every profile reads.
+    3 other profile(s) do not mount dsh-mcp-lazy, so they would lose codegraph with no replacement:
+    default, dsh-tui, headless.
+    Mount dsh-mcp-lazy in those profiles, or move the row into web's own layer, if they need it.
+```
+
+如果那些 profile 也需要这台服务器，先在那里也挂上本插件（或把行搬过去）再落盘。
 
 有两个字段本插件**没有实现** —— `reconnect` 和 `failOnStartupError`。带这两个字段的行会被报成
 `unsupported-field` 并**原样留下**（不会搬、也不会禁用），所以加载不会因为一个「看起来配了、其实没
@@ -115,6 +138,7 @@ mcp({})                                # 状态：工具数 / 连接态 / 缓存
 | [docs/development.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/development.md) | 构建、测试、为什么 `link-dsh` 是必须的 |
 | [docs/design/plan.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/plan.md) | 实现计划与验收标准 |
 | [docs/design/adopt-native-rows.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/adopt-native-rows.md) | `adopt` 命令：设计、不变量、验收标准，以及实施时才发现的事 |
+| [docs/design/mcp-adopt-command.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/mcp-adopt-command.md) | `/mcp-adopt` slash 命令，以及改动了它的那轮对抗性评审 |
 | [docs/design/parity-pi-mcp-adapter.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/parity-pi-mcp-adapter.md) | 与 `pi-mcp-adapter` v2.33.0 的逐模块审计 |
 
 > 详细文档目前只有英文版。这份中文 README 是入口页。
@@ -135,7 +159,7 @@ mcp({})                                # 状态：工具数 / 连接态 / 缓存
 
 ```bash
 pnpm install
-pnpm test          # 构建 → 重链 peer 包 → 277 个用例
+pnpm test          # 构建 → 重链 peer 包 → 305 个用例
 pnpm run check     # typecheck（含测试）→ build
 ```
 

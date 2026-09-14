@@ -37,6 +37,16 @@ after(() => {
 interface FakeContext {
   tools: { register: (definition: ToolDefinition) => () => void }
   effect: (callback: () => (() => void | Promise<void>), label?: string) => void
+  /**
+   * Cordis' optional-dependency seam.
+   *
+   * Modelled but never fired: a plugin that reaches for a service through
+   * `inject` must stay inactive until that service exists, so "the callback did
+   * not run" is the state these tests are in. `injections` records what was
+   * asked for, which is how the gateway's independence from the command
+   * registry is asserted.
+   */
+  inject: (deps: readonly string[], callback: (child: unknown) => void) => unknown
 }
 
 /**
@@ -56,10 +66,12 @@ function fakeContext(): {
   ctx: FakeContext
   registered: ToolDefinition[]
   effects: string[]
+  injections: (readonly string[])[]
   disposeAll: () => void | Promise<void>
 } {
   const registered: ToolDefinition[] = []
   const effects: string[] = []
+  const injections: (readonly string[])[] = []
   const disposers: (() => void | Promise<void>)[] = []
   const ctx: FakeContext = {
     tools: {
@@ -75,11 +87,16 @@ function fakeContext(): {
       effects.push(label ?? '(unlabeled)')
       disposers.push(callback())
     },
+    inject: deps => {
+      injections.push([...deps])
+      return {}
+    },
   }
   return {
     ctx,
     registered,
     effects,
+    injections,
     disposeAll: async () => {
       for (const dispose of disposers) await dispose()
     },
@@ -100,10 +117,13 @@ describe('plugin exports', () => {
   })
 
   it('accepts an empty server list', () => {
-    const { ctx, registered, effects } = fakeContext()
+    const { ctx, registered, effects, injections } = fakeContext()
     assert.doesNotThrow(() => apply(ctx as never, resolved()))
     assert.equal(registered.length, 1)
     assert.deepEqual(effects, [`mcp-lazy.dispose(${PROXY_TOOL_NAME})`])
+    // The gateway's one optional dependency, and the reason `inject` above stays
+    // `['tools']`: a composition with no command registry must still get its tool.
+    assert.deepEqual(injections, [['commands']])
   })
 
   it('registers exactly one tool, built by defineTool', () => {

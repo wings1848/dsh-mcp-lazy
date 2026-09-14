@@ -27,6 +27,16 @@ export const NATIVE_MCP_PLUGIN = '@deepseek-ai/dsh-mcp-client'
 /** This plugin's own loader id, whose `servers` list adopted rows go into. */
 export const LAZY_PLUGIN = 'mcp-lazy'
 
+/**
+ * This plugin's npm package name, as a profile's `dsh.profile.bundles` lists it.
+ *
+ * Distinct from {@link LAZY_PLUGIN}: the loader id names the row, the package
+ * name names the dependency. Answering "does this profile even mount the
+ * gateway?" means asking about the package, and using the row id for it would
+ * silently answer "no" for every profile.
+ */
+export const LAZY_PACKAGE = 'dsh-mcp-lazy'
+
 /** The marker `dsh --dump-config` uses to name the layers that patched a row. */
 const PATCHED_BY = ', patched by '
 

@@ -36,6 +36,7 @@ import {
   copyFileSync,
   existsSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -47,7 +48,7 @@ import { dirname, join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
-import { LAZY_PLUGIN, NATIVE_MCP_PLUGIN, parseComposedDump } from '../lib/adopt-compose.js'
+import { LAZY_PACKAGE, LAZY_PLUGIN, NATIVE_MCP_PLUGIN, parseComposedDump } from '../lib/adopt-compose.js'
 import { findNativeRow } from '../lib/adopt-patch.js'
 import { applyEdits, planAdoption, resolveNativeRows, summarizePlan } from '../lib/adopt.js'
 
@@ -470,6 +471,58 @@ function timestamp() {
   )
 }
 
+/**
+ * Profiles that read the file being edited but do not mount this plugin.
+ *
+ * The two halves of this command can land in different layers, and that is not a
+ * detail: the native row usually lives in the **home** patch, which every profile
+ * reads, while `id: mcp-lazy` lives in one profile's patch. Disabling the home
+ * row therefore takes the server away from every *other* profile too — and those
+ * profiles have no gateway to receive it, so they simply lose the capability,
+ * with nothing anywhere saying so.
+ *
+ * The plan itself cannot see this: it never looks at profiles other than the one
+ * it was asked about. So the answer is computed here, at render time, from the
+ * one fact that decides it — whether a profile's manifest lists this package.
+ *
+ * @param plan - The plan about to be rendered.
+ * @param homePatch - Absolute path of the home layer's patch file.
+ * @param dshHome - Absolute `$DSH_HOME`.
+ * @returns Profile names that would lose the service, sorted; empty when the
+ *   disabled rows all live inside the profile's own layer.
+ */
+function profilesLosingService(plan, homePatch, dshHome) {
+  const shareTheBlast = plan.disables.some(disable => resolve(disable.file) === resolve(homePatch))
+  if (!shareTheBlast) return []
+
+  const profilesDir = join(dshHome, 'profiles')
+  let names
+  try {
+    names = readdirSync(profilesDir)
+  } catch {
+    // No profiles directory to reason about is not a reason to fail the plan.
+    return []
+  }
+
+  const losing = []
+  for (const name of names) {
+    if (name.startsWith('.')) continue
+    const manifest = join(profilesDir, name, 'package.json')
+    let parsed
+    try {
+      parsed = JSON.parse(readFileSync(manifest, 'utf8'))
+    } catch {
+      // Not a profile (a stray directory, an unreadable manifest): silence is
+      // right here, because guessing would name a profile that does not exist.
+      continue
+    }
+    if (parsed?.dsh?.profile === undefined) continue
+    const bundles = parsed.dsh.profile.bundles
+    if (!Array.isArray(bundles) || !bundles.includes(LAZY_PACKAGE)) losing.push(name)
+  }
+  return losing.sort()
+}
+
 /** Print the plan for a human. */
 function renderPlan(result, options) {
   const { plan } = result
@@ -491,6 +544,25 @@ function renderPlan(result, options) {
   lines.push(summarizePlan(plan))
   if (plan.blocked === 0 && plan.edits.length === 0) {
     return lines.join('\n')
+  }
+  const losing =
+    options.file === undefined && result.dshHome !== undefined
+      ? profilesLosingService(plan, result.homePatch, result.dshHome)
+      : []
+  if (losing.length > 0) {
+    const what = plan.adoptions.map(adoption => adoption.source.serverName ?? adoption.source.id)
+    lines.push('')
+    lines.push(
+      `  ⚠ the row being disabled lives in the home layer ${result.homePatch}, which every profile reads.`,
+    )
+    lines.push(
+      `    ${losing.length} other profile(s) do not mount ${LAZY_PACKAGE}, so they would lose ` +
+        `${what.join(', ')} with no replacement: ${losing.join(', ')}.`,
+    )
+    lines.push(
+      `    Mount ${LAZY_PACKAGE} in those profiles, or move the row into ${options.profile}'s own layer, ` +
+        'if they need it.',
+    )
   }
   if (result.overlayNames !== undefined && result.overlayNames.length > 0) {
     lines.push('')
@@ -658,4 +730,4 @@ if (isMain()) {
   process.exitCode = main()
 }
 
-export { main, parseArgs, buildPlan, hasRow, serversOf, EXIT }
+export { main, parseArgs, buildPlan, hasRow, serversOf, profilesLosingService, EXIT }

@@ -5,6 +5,41 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-09-14
+
+### Added
+
+- **`/mcp-adopt`** — the move `adopt` makes, from inside the GUI. The status output has always
+  told you a server was configured twice (*"move those servers here"*), but acting on that meant
+  leaving the session for a terminal. The command reuses the published CLI rather than
+  reimplementing it, so the planner, the byte-preserving edits, the backups and the atomic write
+  stay one code path. A bare `/mcp-adopt` is a dry run; `/mcp-adopt apply` writes. It is reached
+  through `ctx.inject(['commands'])` rather than the plugin's own `inject` list, because waiting
+  for a command registry would leave the gateway inactive on any composition that has none — the
+  one regression this plugin must never ship. Writing is not cancellable (the CLI renames two
+  files in sequence, so a signal between them leaves half a move), every run is bounded by a
+  timeout, and a successful write is followed by a re-plan whose result is shown to you, so
+  "written" comes with evidence instead of an assurance.
+- `adopt` now reports the move's **blast radius across profiles**. The native row usually lives in
+  the *home* patch, which every profile reads, while this plugin's row lives in one profile's
+  patch — so disabling the former takes the server away from every other profile too, and those
+  profiles have no gateway to receive it. The plan now names them and gives both ways out. On a
+  machine where this is the configuration, a dry run says so before anything is written.
+
+### Fixed
+
+- **`npx dsh-mcp-lazy-adopt` did not work on a clean machine.** The CLI is a published `bin`
+  entry, but the YAML parser it imports sat in `devDependencies`, where `npx` does not install
+  it: `import 'js-yaml'` from `lib/adopt-compose.js` and `lib/adopt-patch.js` died with
+  `ERR_MODULE_NOT_FOUND` on the first statement. It worked on the machine it was written on
+  because an unrelated package had hoisted a copy into the same `node_modules` — the kind of
+  accident that survives every test written against a working tree. `js-yaml` is now a real
+  dependency, and a new test scans every bare import in `lib/` and `scripts/` against the
+  manifest so the next one cannot hide.
+- The `inject` contract in the plugin-load tests is now modelled rather than assumed: the fakes
+  gained the `inject` seam, and the suite asserts the gateway registers its tool with no command
+  registry present.
+
 ## [0.2.1] - 2026-09-14
 
 ### Fixed
