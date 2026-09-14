@@ -5,7 +5,7 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-09-14
 
 ### Added
 
@@ -329,6 +329,7 @@ fail first — and fixed before this release:
   heavily cannot flood the model's context through an error message
   (`src/connection.ts`).
 
-[Unreleased]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/wings1848/dsh-mcp-lazy/releases/tag/v0.1.0
