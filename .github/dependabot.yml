@@ -1,28 +1,25 @@
 version: 2
 
 updates:
-  # npm dependencies. The @deepseek-ai/* packages are intentionally pinned to
-  # exact versions in devDependencies -- the plugin is developed against the
-  # harness it runs on -- so they are ignored here. Bumping them is a deliberate
-  # act: change the pin and the peer range together, then re-run the suite.
-  - package-ecosystem: npm
-    directory: /
-    schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: 'build'
-      include: scope
-    ignore:
-      - dependency-name: '@deepseek-ai/*'
-    groups:
-      dev-dependencies:
-        dependency-type: development
-        update-types: [minor, patch]
+  # npm dependencies live in `renovate.json`, not here.
+  #
+  # This entry failed on every run -- 2026-09-10 and 2026-09-14, the only two it
+  # has had. The log says why: Dependabot read `packageManager: pnpm@12.3.4` from
+  # package.json, could not download that pnpm's standalone binary
+  # ("Could not download the pnpm 12.3.4 binary: Could not reach
+  # https://registry.npmjs.org/@pnpm/exe.linux-x64/12.3.4: fetch failed"), fell
+  # back to the pnpm bundled with its corepack -- 11.17.0 -- and then could not
+  # rewrite a pnpm-12 lockfile: zod, @types/node, js-yaml and typescript all came
+  # back as `unknown_error`. The package is reachable from an ordinary machine, so
+  # the failure is on its side, not in this configuration. Renovate installs the
+  # pinned pnpm rather than a fallback, which is the difference that matters.
+  #
+  # The rules this entry carried -- ignore @deepseek-ai/*, group dev minor and
+  # patch, weekly on Monday, `build(deps)` commit prefix -- are all in
+  # `renovate.json`.
 
   # Keep the workflow actions current. They are pinned to major tags, so this is
-  # how those majors get bumped.
+  # how those majors get bumped. This half has succeeded on every run, so it stays.
   - package-ecosystem: github-actions
     directory: /
     schedule:

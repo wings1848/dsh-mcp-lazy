@@ -1,0 +1,45 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+
+  "extends": ["config:recommended"],
+
+  "timezone": "Asia/Shanghai",
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 5,
+
+  "semanticCommitType": "build",
+  "semanticCommitScope": "deps",
+
+  "packageRules": [
+    {
+      "description": "The @deepseek-ai/* packages are the harness this plugin is developed against, pinned to exact versions on purpose. Bumping one is a deliberate act -- the pin and the peer range move together, then the suite runs -- so no bot should propose it. This is the same rule Dependabot carried in .github/dependabot.yml.",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["@deepseek-ai/*"],
+      "enabled": false
+    },
+    {
+      "description": "Dependabot keeps the workflow actions: that half of its config has succeeded on every run, and two bots proposing the same action bump is noise. Renovate owns npm because Dependabot could not install the pnpm this repository pins.",
+      "matchManagers": ["github-actions"],
+      "enabled": false
+    },
+    {
+      "description": "Group development minor and patch bumps into one pull request, which is the shape .github/dependabot.yml asked for. Majors stay separate: they are the ones that need reading.",
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "dev-dependencies"
+    },
+    {
+      "description": "js-yaml is pinned to an exact version so the CLI's YAML round-trip cannot drift under it. Keep the pin -- a bump stays a single visible line -- while still letting Renovate propose new ones, including the security releases an exact pin would otherwise freeze out.",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["js-yaml"],
+      "rangeStrategy": "pin"
+    },
+    {
+      "description": "The runtime dependency the gateway is built on. Majors here change the transport and tool-schema contracts, so they arrive as their own pull request rather than inside a group.",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["@modelcontextprotocol/sdk"],
+      "separateMultipleMajor": true
+    }
+  ]
+}
