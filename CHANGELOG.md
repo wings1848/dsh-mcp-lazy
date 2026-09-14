@@ -5,6 +5,61 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **The native-server warning now says only what it checked.** `detectNativelyRegistered` reports
+  every enabled `@deepseek-ai/dsh-mcp-client` entry, whether or not this gateway serves it too,
+  while the notice asserted overlap for all of them — *"is also configured in … Both plugins now
+  work"* — and told the user to "move those servers here". Two adversarial reviews of the fix
+  found five clauses that were wrong, each in a state the tests did not cover:
+
+  - **"move those servers here" was unsafe.** For an entry this gateway already lists with
+    `disabled: true`, the server is not absent — it is here and switched off. Adding a second
+    entry with the same `serverName` makes the registry constructor throw `mcp-lazy: duplicate
+    serverName`, so following the advice would have stopped the plugin from loading. That state
+    now says to clear the flag instead.
+  - **"Both plugins now work" was a liveness claim**, and the listing it is appended to prints
+    `failed` plus the spawn error for a server whose start failed. It contradicted its own output.
+  - **"so those schemas enter every request" was another one**, this time about the other plugin. A
+    native row whose `config` mcp-client rejects — it requires `transport` plus `command` or `url`,
+    not just `serverName` — registers nothing, and neither does a row whose server is down, because
+    mcp-client drops a server whose reconnect budget is spent. The sentence now states that
+    plugin's *mode* rather than an effect on the current request.
+  - **A native entry with no usable `serverName` registers nothing either**, so it was named in a
+    warning it could not belong to. Names failing `SERVER_NAME_PATTERN` are ignored, as are
+    non-strings from the exported array seam, where `RegExp.test` coerces and `join` rendered
+    `undefined` as nothing — `()` reached a sentence. The *container* is checked too: only an array
+    is read, so a JavaScript caller passing anything else degrades to no warning at all — where
+    `0.3.0` raised `TypeError: native.join is not a function`, and the revision in between spelled
+    a bare string `'abc'` into three servers named `a`, `b` and `c`.
+  - **A name a duplicated loader entry repeats** is counted once instead of twice.
+
+  The warning renders one of three sentences — configured both here and there, listed here with
+  `disabled: true`, or absent here — each with its plural form, each stating configuration and the
+  config action that applies, and each offering to disable the native row only "if you do not need
+  it", since that leaves nothing serving the server. Every sentence is pinned in
+  `test/unit/proxy-tool.test.ts`; the failed-start contradiction is built against a real child
+  process in `test/unit/connection.e2e.test.ts`, and `test/unit/plugin-load.test.ts` now asserts
+  the sentence rather than just the server names.
+
+  Residues, all deliberate and none of them silent to the user:
+
+  - **Case-only differences are reported as absent.** This gateway keys servers by exact name, so a
+    native `n` beside a configured `N` reads as a server it does not have — while the listing two
+    lines above prints `N`. No clause is false about the *name*; the diagnosis is wrong about the
+    *server*, and it is the one surviving case where a sentence can look like it contradicts the
+    listing it belongs to.
+  - **With `directTools: true` this gateway promotes tools natively itself**, so neither "add it
+    here" nor "remove it from one of the two" restores the saving on its own (promotion also needs
+    a catalog, so a cold cache promotes nothing). Neither sentence promises an outcome, so neither
+    is false; both are incomplete in that configuration.
+  - **A computed `serverName` is not reported at all.** `!!js` in a native row's config leaves the
+    raw expression node in the loader entry, so detection reads it as `(unnamed)`, the pattern
+    filter drops it, and mcp-client goes on to register whatever the expression evaluated to. That
+    is a false negative, which is the safe direction, but it is a real one.
+
 ## [0.3.0] - 2026-09-14
 
 ### Added

@@ -476,9 +476,14 @@ describe('conflict with @deepseek-ai/dsh-mcp-client', () => {
     const { ctx, registered } = contextWithLoader([client('shared'), client('also-shared')])
     apply(ctx as never, resolved([]))
 
+    // The sentence itself, not just the names: this gateway has neither server,
+    // so the advice is "add it here".
     const text = await statusOf(registered)
-    assert.match(text, /shared, also-shared/)
-    assert.match(text, /dsh-mcp-client/)
+    assert.match(
+      text,
+      /⚠ 2 servers \(shared, also-shared\) are enabled in @deepseek-ai\/dsh-mcp-client/,
+    )
+    assert.match(text, /This gateway does not have them/)
   })
 
   it('ignores entries the other plugin has disabled', async () => {
@@ -486,8 +491,8 @@ describe('conflict with @deepseek-ai/dsh-mcp-client', () => {
     apply(ctx as never, resolved([]))
 
     const text = await statusOf(registered)
-    assert.match(text, /live/)
-    assert.doesNotMatch(text, /off/)
+    assert.match(text, /⚠ 1 server \(live\) is enabled in @deepseek-ai\/dsh-mcp-client/)
+    assert.doesNotMatch(text, /\(off\)/)
   })
 
   it('ignores unrelated plugin entries', async () => {
@@ -497,10 +502,12 @@ describe('conflict with @deepseek-ai/dsh-mcp-client', () => {
     ])
     apply(ctx as never, resolved([]))
 
-    // No serverName in the config, so the entry is still counted -- but the
-    // unrelated one must not be.
+    // The first entry has no `serverName`, so mcp-client's own Config rejects it
+    // and it registers no tool -- there is nothing to warn about. The unrelated
+    // plugin must not be named either.
     const text = await statusOf(registered)
     assert.doesNotMatch(text, /dsh-better-sidebar/)
+    assert.doesNotMatch(text, /dsh-mcp-client/)
   })
 
   it('says nothing when no other plugin is mounted', async () => {
@@ -529,7 +536,9 @@ describe('conflict with @deepseek-ai/dsh-mcp-client', () => {
     // on claiming the saving was cancelled after it had been restored.
     const { ctx, registered, setEntries } = contextWithLoader([client('moved-away')])
     apply(ctx as never, resolved([{ serverName: 'moved-away', transport: 'stdio', command: 'x' }]))
-    assert.match(await statusOf(registered), /moved-away.*also|also.*configured/s)
+    // The overlap wording specifically: this server is declared by both plugins,
+    // which is the state that earns the "both here and in" sentence.
+    assert.match(await statusOf(registered), /moved-away\) is configured both here and in/s)
 
     setEntries([])
     const text = await statusOf(registered)

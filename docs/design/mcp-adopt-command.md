@@ -11,8 +11,9 @@
 开机静默改写用户的配置是危险动作。
 
 但那条边界留下了一个**可观测的摩擦**：插件已经能看见原生行、也在状态里报警告
-（`renderStatus` 的 conflict 段，原文就是 *"Tell the user, and move those servers here"*），
-而用户要做的事是**开一个终端、跑一条 npx 命令**。§8.1 已证明这个动作是一次性的，
+（`renderStatus` 的 conflict 段，原文就是 *"This gateway does not have it; add it here, or
+disable the native row if you do not need it"*），而用户要做的事是**开一个终端、跑一条 npx
+命令**。§8.1 已证明这个动作是一次性的，
 但它仍然是「看得见问题」与「解决问题」之间的一道手工缝。
 
 本命令把那道缝补上：**把 CLI 已经做对的事，搬到 GUI 里，由用户显式触发一次。**

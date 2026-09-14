@@ -98,6 +98,19 @@ async function run(args: Record<string, unknown>, registry: McpGatewayRegistry):
   return value as string
 }
 
+/** `status` output for a registry, with the native plugin's servers supplied. */
+async function statusWith(
+  registry: McpGatewayRegistry,
+  native: readonly string[],
+): Promise<string> {
+  const tool = createProxyTool(registry, undefined, undefined, native)
+  return String(
+    await tool.execute({}, { signal: new AbortController().signal } as Parameters<
+      typeof tool.execute
+    >[1]),
+  )
+}
+
 before(() => {
   process.env['DSH_HOME'] = tempDir('dsh-mcp-lazy-proxy-')
 
@@ -312,18 +325,141 @@ describe('status', () => {
   })
 
   it('warns when another plugin is registering the same servers natively', async () => {
-    // Both plugins work, nothing clashes, and the saving silently does not
+    // Both plugins serve it, nothing clashes, and the saving silently does not
     // happen -- so the model has to be the one that notices and says so.
     const registry = new McpGatewayRegistry(config([entry({ serverName: 'shared' })]))
-    const tool = createProxyTool(registry, undefined, undefined, ['shared', 'also-shared'])
+    const text = await statusWith(registry, ['shared'])
+    assert.match(
+      text,
+      /⚠ 1 server \(shared\) is configured both here and in @deepseek-ai\/dsh-mcp-client/,
+    )
+    assert.match(text, /Remove it from one of the two/)
+    assert.doesNotMatch(text, /is enabled in @deepseek-ai\/dsh-mcp-client/)
+    assert.doesNotMatch(text, /This gateway does not have/)
+  })
+
+  it('claims configuration, not liveness, about the two copies', async () => {
+    // The wording that shipped said "Nothing clashes and both run", which the
+    // listing can contradict: a local entry whose start failed prints `failed`
+    // plus its spawn error directly above this sentence. That state needs a real
+    // connection layer, so it is built in `connection.e2e.test.ts`; what is
+    // pinned here is that the claim itself is gone.
+    const registry = new McpGatewayRegistry(config([entry({ serverName: 'both-copies' })]))
+    const text = await statusWith(registry, ['both-copies'])
+    assert.match(text, /⚠ 1 server \(both-copies\) is configured both here and in/)
+    assert.doesNotMatch(text, /both run/)
+    assert.doesNotMatch(text, /both work/i)
+  })
+
+  it('does not claim overlap for a server this gateway does not have', async () => {
+    // The overlap wording shipped once without checking, so it announced that
+    // "both plugins" were serving a server this gateway never had. The advice
+    // differs by state, so the states are rendered apart.
+    const registry = new McpGatewayRegistry(config([entry({ serverName: 'mine' })]))
+    const text = await statusWith(registry, ['absent'])
+    assert.match(text, /⚠ 1 server \(absent\) is enabled in @deepseek-ai\/dsh-mcp-client/)
+    assert.match(text, /This gateway does not have it; add it here/)
+    assert.doesNotMatch(text, /both here and in/)
+  })
+
+  it('tells a disabled entry to be enabled, never to be added again', async () => {
+    // The advice must not be "move it here": the server is already here, and a
+    // second entry with the same serverName makes the registry constructor throw
+    // `mcp-lazy: duplicate serverName`, so the plugin would fail to load.
+    const registry = new McpGatewayRegistry(
+      config([entry({ serverName: 'off-here', disabled: true })]),
+    )
+    const text = await statusWith(registry, ['off-here'])
+    assert.match(text, /⚠ 1 server \(off-here\) is enabled in @deepseek-ai\/dsh-mcp-client/)
+    assert.match(text, /This gateway lists it with `disabled: true`/)
+    assert.match(text, /clear that flag/)
+    assert.doesNotMatch(text, /add it here/)
+    assert.doesNotMatch(text, /both here and in/)
+  })
+
+  it('ignores a native entry whose serverName cannot register anything', async () => {
+    // `detectNativelyRegistered` substitutes `(unnamed)` for an entry with no
+    // usable serverName. mcp-client's own Config rejects those
+    // (`serverName: z.string().required().pattern(SERVER_NAME_PATTERN)`), so the
+    // entry registers zero tools -- there are no schemas to warn about, and
+    // saying so would be false.
+    const registry = new McpGatewayRegistry(config([]))
+    const text = await statusWith(registry, ['(unnamed)'])
+    assert.doesNotMatch(text, /dsh-mcp-client/)
+    assert.doesNotMatch(text, /unnamed/)
+  })
+
+  it('ignores empty and over-long names from the array form', async () => {
+    // The exported array seam is caller-supplied, and both of these fail
+    // mcp-client's pattern, so neither can put a schema into a request.
+    const registry = new McpGatewayRegistry(config([]))
+    assert.doesNotMatch(await statusWith(registry, ['']), /dsh-mcp-client/)
+    assert.doesNotMatch(await statusWith(registry, ['x'.repeat(33)]), /dsh-mcp-client/)
+  })
+
+  it('ignores names from the array form that are not strings at all', async () => {
+    // `RegExp.test` coerces its argument and `join` renders `null` as nothing, so
+    // these reached the sentence as `()` and `(42)` before the seam was typed.
+    const registry = new McpGatewayRegistry(config([]))
+    const seam = [undefined, null, 42] as unknown as string[]
+    assert.doesNotMatch(await statusWith(registry, seam), /dsh-mcp-client/)
+  })
+
+  it('refuses a non-array native source instead of spelling it out', async () => {
+    // The exported seam is caller-supplied, and a bare string is iterable: the
+    // dedupe pass used to spell `'abc'` into three servers named `a`, `b` and
+    // `c`. Names fabricated out of nothing are worse than the `TypeError` this
+    // call raised before the sentence was split in three.
+    const registry = new McpGatewayRegistry(config([]))
+    const tool = createProxyTool(registry, undefined, undefined, 'abc' as unknown as string[])
     const text = String(
       await tool.execute({}, { signal: new AbortController().signal } as Parameters<
         typeof tool.execute
       >[1]),
     )
-    assert.match(text, /shared, also-shared/)
-    assert.match(text, /dsh-mcp-client/)
-    assert.match(text, /saves nothing/)
+    assert.doesNotMatch(text, /dsh-mcp-client/)
+  })
+
+  it('describes the native plugin instead of claiming what enters a request', async () => {
+    // Two reviews found this clause asserting an effect this code cannot see: a
+    // native row whose config mcp-client rejects (it needs `transport` plus
+    // `command` or `url`) registers nothing, and neither does one whose server is
+    // down, because mcp-client drops a server whose reconnect budget is spent. The
+    // reason is now that plugin's mode, which holds in both states.
+    const registry = new McpGatewayRegistry(config([]))
+    const text = await statusWith(registry, ['codegraph'])
+    assert.match(text, /registers MCP tools natively instead of leaving them behind/)
+    assert.match(text, /disable the native row if you do not need it/)
+    assert.doesNotMatch(text, /every request/)
+    assert.doesNotMatch(text, /as a native tool/)
+  })
+
+  it('counts a duplicated native name once', async () => {
+    // Two loader entries with one name are one server: the second instance fails
+    // mcp-client's own "already in use" check.
+    const registry = new McpGatewayRegistry(config([]))
+    const text = await statusWith(registry, ['dup', 'dup'])
+    assert.match(text, /⚠ 1 server \(dup\) is enabled in/)
+    assert.doesNotMatch(text, /2 servers/)
+  })
+
+  it('groups all three states in one listing', async () => {
+    const registry = new McpGatewayRegistry(
+      config([entry({ serverName: 'shared' }), entry({ serverName: 'off-here', disabled: true })]),
+    )
+    const text = await statusWith(registry, ['shared', 'off-here', 'absent'])
+    assert.match(text, /1 server \(shared\) is configured both here and in/)
+    assert.match(text, /1 server \(off-here\) is enabled in/)
+    assert.match(text, /1 server \(absent\) is enabled in/)
+  })
+
+  it('pluralises every warning', async () => {
+    const registry = new McpGatewayRegistry(
+      config([entry({ serverName: 'a' }), entry({ serverName: 'b' })]),
+    )
+    const text = await statusWith(registry, ['a', 'b', 'c', 'd'])
+    assert.match(text, /⚠ 2 servers \(a, b\) are configured both here and in/)
+    assert.match(text, /⚠ 2 servers \(c, d\) are enabled in/)
   })
 
   it('says nothing about a conflict when there is none', async () => {
@@ -336,14 +472,12 @@ describe('status', () => {
     // The other plugin alone is the state a user lands in by configuring MCP in
     // the wrong place, which is the case this exists for.
     const registry = new McpGatewayRegistry(config([]))
-    const tool = createProxyTool(registry, undefined, undefined, ['orphaned'])
-    const text = String(
-      await tool.execute({}, { signal: new AbortController().signal } as Parameters<
-        typeof tool.execute
-      >[1]),
-    )
+    const text = await statusWith(registry, ['orphaned'])
     assert.match(text, /No MCP servers are configured/)
-    assert.match(text, /orphaned/)
+    assert.match(
+      text,
+      /⚠ 1 server \(orphaned\) is enabled in @deepseek-ai\/dsh-mcp-client/,
+    )
   })
 
   it('reports cached state, tool count, and the cache path', async () => {

@@ -17,7 +17,7 @@ import type { OutputGuard } from './output-guard.js'
 import { renderToolResult } from './projection.js'
 import { McpGatewayRegistry, summarizeParameters } from './registry.js'
 import { PROXY_TOOL_NAME, PROXY_TOOL_PARAMETERS } from './schema.js'
-import type { ServerStatus } from './types.js'
+import { SERVER_NAME_PATTERN, type ServerStatus } from './types.js'
 
 /** Arguments accepted by the proxy tool, as written by the model. */
 interface ProxyArgs {
@@ -87,18 +87,86 @@ export type NativeServersSource = readonly string[] | (() => readonly string[])
  * a host without one — must degrade to "nothing to report" rather than fail the
  * tool call that happened to ask for status.
  *
+ * The container is checked as well as the getter's result: a JavaScript caller
+ * that passes a bare string reaches the same dedupe pass, and `[...new Set('abc')]`
+ * is three servers named `a`, `b` and `c` — names invented rather than reported.
+ *
  * @param source - A fixed list, or a function returning the current list.
  * @returns The resolved list, or an empty list.
  */
 function resolveNativeServers(source: NativeServersSource | undefined): readonly string[] {
   if (source === undefined) return []
-  if (typeof source !== 'function') return source
+  if (typeof source !== 'function') return Array.isArray(source) ? source : []
   try {
     const current = source()
     return Array.isArray(current) ? current : []
   } catch {
     return []
   }
+}
+
+/**
+ * What the other plugin does with the servers it serves, in contrast to this one.
+ *
+ * Stated as that plugin's *mode* rather than as an effect on the current request,
+ * because this gateway cannot see the effect. Two adversarial reviews found the
+ * difference matters: a native row whose `config` mcp-client rejects — it requires
+ * `transport` plus `command` or `url`, not just `serverName` — registers nothing,
+ * and a row whose server is down registers nothing either, since mcp-client drops
+ * a server whose reconnect budget is spent. A clause claiming "those schemas enter
+ * every request" was false in both states.
+ */
+const NATIVE_MODE =
+  'which registers MCP tools natively instead of leaving them behind this gateway\'s search'
+
+/**
+ * The three states a natively-enabled server can be in here, and the advice each
+ * one actually needs.
+ *
+ * `both`: this gateway has it enabled too, so one of the two copies has to go.
+ * `listed-disabled`: the entry is already here and switched off — the advice must
+ * be to clear that flag, because *adding* it would create a second entry with the
+ * same `serverName` and the registry constructor throws `mcp-lazy: duplicate
+ * serverName` on those, so following a "move it here" would stop the plugin from
+ * loading. `absent`: there is nothing here yet.
+ */
+type NativeState = 'both' | 'listed-disabled' | 'absent'
+
+/**
+ * One warning about a server the native MCP plugin is enabled for.
+ *
+ * Configuration is all it speaks about. The listing it is appended to prints
+ * `failed` and the spawn error for a server whose start failed, so a claim that
+ * "both run" contradicted its own output; and the reason is {@link NATIVE_MODE},
+ * that plugin's mode, rather than a claim about what enters a request.
+ *
+ * @param names - The servers this sentence names. Never empty.
+ * @param state - Which of the three states above these servers are in.
+ * @returns One line for the status listing.
+ */
+function renderNativeWarning(names: readonly string[], state: NativeState): string {
+  const plural = names.length === 1 ? '' : 's'
+  const verb = names.length === 1 ? 'is' : 'are'
+  const them = names.length === 1 ? 'it' : 'them'
+  const subject = `${names.length} server${plural} (${names.join(', ')})`
+  if (state === 'both') {
+    return (
+      `⚠ ${subject} ${verb} configured both here and in @deepseek-ai/dsh-mcp-client, ` +
+      `${NATIVE_MODE}. Remove ${them} from one of the two.`
+    )
+  }
+  if (state === 'listed-disabled') {
+    return (
+      `⚠ ${subject} ${verb} enabled in @deepseek-ai/dsh-mcp-client, ${NATIVE_MODE}. ` +
+      `This gateway lists ${them} with \`disabled: true\`; clear that flag — adding ` +
+      `${them} again would be a duplicate — or disable the native row if you do not need it.`
+    )
+  }
+  return (
+    `⚠ ${subject} ${verb} enabled in @deepseek-ai/dsh-mcp-client, ${NATIVE_MODE}. ` +
+    `This gateway does not have ${them}; add ${them} here, or disable the native row if ` +
+    'you do not need it.'
+  )
 }
 
 /**
@@ -114,22 +182,44 @@ function renderStatus(
   cachePath: string,
   nativeServers: NativeServersSource = [],
 ): string {
-  const native = resolveNativeServers(nativeServers)
-  // Named first and unconditionally: it is the only line here that describes a
-  // problem with the *configuration* rather than with a server, and it silently
-  // cancels the reason the plugin was installed.
-  const conflict =
-    native.length === 0
+  const reported = resolveNativeServers(nativeServers)
+  // mcp-client's own Config requires a `serverName` matching this pattern
+  // (`z.string().required().pattern(SERVER_NAME_PATTERN)`, the same regex), and an
+  // entry that fails it registers nothing — no schemas, nothing to warn about.
+  // That drops the `(unnamed)` placeholder `detectNativelyRegistered` substitutes
+  // for a config-less entry along with empty or over-long names from the exported
+  // array seam, whose elements need not even be strings: `RegExp.test` coerces,
+  // and `join` renders `null` as nothing, so `(undefined)` reached a sentence as
+  // `()`. One name is one server: a duplicated loader entry is the same server, and
+  // the second instance fails mcp-client's own "already in use" check.
+  const native = [...new Set(reported)].filter(
+    name => typeof name === 'string' && SERVER_NAME_PATTERN.test(name),
+  )
+  // Membership of this gateway's config is not the same question as whether it
+  // serves the server: `status` lists disabled entries too, and a disabled entry
+  // needs "switch it on here", not "add it here".
+  const enabledHere = new Set(
+    servers.filter(server => !server.disabled).map(server => server.serverName),
+  )
+  const listedHere = new Set(servers.map(server => server.serverName))
+  const both: string[] = []
+  const listedDisabled: string[] = []
+  const absent: string[] = []
+  for (const name of native) {
+    if (enabledHere.has(name)) both.push(name)
+    else if (listedHere.has(name)) listedDisabled.push(name)
+    else absent.push(name)
+  }
+  // Named unconditionally: these are the only lines here that describe a problem
+  // with the *configuration* rather than with a server, and they silently cancel
+  // the reason the plugin was installed.
+  const conflict = [
+    ...(both.length === 0 ? [] : ['', renderNativeWarning(both, 'both')]),
+    ...(listedDisabled.length === 0
       ? []
-      : [
-          '',
-          `⚠ ${native.length} server${native.length === 1 ? '' : 's'} ` +
-            `(${native.join(', ')}) ${native.length === 1 ? 'is' : 'are'} also ` +
-            'configured in @deepseek-ai/dsh-mcp-client, which registers every MCP tool as a ' +
-            'native tool. Both plugins now work, but those schemas enter every request ' +
-            'anyway, so this gateway saves nothing for them. Tell the user, and move those ' +
-            'servers here (or disable them there) to get the saving back.',
-        ]
+      : ['', renderNativeWarning(listedDisabled, 'listed-disabled')]),
+    ...(absent.length === 0 ? [] : ['', renderNativeWarning(absent, 'absent')]),
+  ]
 
   if (servers.length === 0) {
     return [

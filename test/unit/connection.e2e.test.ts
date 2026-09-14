@@ -492,6 +492,28 @@ describe('M2 — independent of any live server', () => {
     assert.match(status, /failed/)
     assert.equal(connections.isConnected('down'), false)
   })
+
+  it('does not claim both copies run while the local one is failed', async () => {
+    // The native-server warning is appended to this very listing, which prints
+    // `failed` and the spawn error for the server it is talking about. A sentence
+    // claiming "both run" therefore contradicted its own output; it now states
+    // configuration only.
+    const { entry } = fixtureServer('down-native', {}, { env: { FIXTURE_FAIL: '1' } })
+    const { registry } = gateway([entry], () => 600_000)
+    const tool = createProxyTool(registry, undefined, undefined, ['down-native'])
+
+    await tool.execute(
+      { connect: 'down-native' },
+      { signal: new AbortController().signal } as never,
+    )
+    const status = String(
+      await tool.execute({}, { signal: new AbortController().signal } as never),
+    )
+    assert.match(status, /down-native — 0 tools .*failed/)
+    assert.match(status, /⚠ 1 server \(down-native\) is configured both here and in/)
+    assert.doesNotMatch(status, /both run/)
+    assert.doesNotMatch(status, /both work/i)
+  })
 })
 
 describe('M2 — cold-start discovery', () => {
