@@ -119,27 +119,65 @@ function renderToolResult(toolName: string, result: unknown): string {
 }
 
 /**
+ * The co-mounted `dsh-mcp-client` servers, as a fixed list or a live getter.
+ *
+ * A getter is the one that matters. Reading the declared entry tree once at
+ * `apply` time goes stale whenever a change lands in a *different* layer: the
+ * loader re-composes the tree and re-runs the entries whose own config changed,
+ * and this plugin's config is not one of them. A server moved out of
+ * `dsh-mcp-client` would then still be reported as co-mounted — wrong in the
+ * direction that hides the saving this plugin exists to provide.
+ *
+ * The plain-array form stays in the union because it is the published signature
+ * of `createProxyTool`; existing callers pass a snapshot and keep working.
+ */
+export type NativeServersSource = readonly string[] | (() => readonly string[])
+
+/**
+ * Resolve a {@link NativeServersSource} to a list, tolerating a throwing getter.
+ *
+ * The conflict notice is diagnostic. A getter that fails — a loader mid-reload,
+ * a host without one — must degrade to "nothing to report" rather than fail the
+ * tool call that happened to ask for status.
+ *
+ * @param source - A fixed list, or a function returning the current list.
+ * @returns The resolved list, or an empty list.
+ */
+function resolveNativeServers(source: NativeServersSource | undefined): readonly string[] {
+  if (source === undefined) return []
+  if (typeof source !== 'function') return source
+  try {
+    const current = source()
+    return Array.isArray(current) ? current : []
+  } catch {
+    return []
+  }
+}
+
+/**
  * Render the status listing.
  *
  * @param servers - Per-server status snapshots.
  * @param cachePath - Where the metadata cache lives.
+ * @param nativeServers - A fixed list, or a getter read at render time.
  * @returns Text for the model.
  */
 function renderStatus(
   servers: readonly ServerStatus[],
   cachePath: string,
-  nativeServers: readonly string[] = [],
+  nativeServers: NativeServersSource = [],
 ): string {
+  const native = resolveNativeServers(nativeServers)
   // Named first and unconditionally: it is the only line here that describes a
   // problem with the *configuration* rather than with a server, and it silently
   // cancels the reason the plugin was installed.
   const conflict =
-    nativeServers.length === 0
+    native.length === 0
       ? []
       : [
           '',
-          `⚠ ${nativeServers.length} server${nativeServers.length === 1 ? '' : 's'} ` +
-            `(${nativeServers.join(', ')}) ${nativeServers.length === 1 ? 'is' : 'are'} also ` +
+          `⚠ ${native.length} server${native.length === 1 ? '' : 's'} ` +
+            `(${native.join(', ')}) ${native.length === 1 ? 'is' : 'are'} also ` +
             'configured in @deepseek-ai/dsh-mcp-client, which registers every MCP tool as a ' +
             'native tool. Both plugins now work, but those schemas enter every request ' +
             'anyway, so this gateway saves nothing for them. Tell the user, and move those ' +
@@ -288,6 +326,7 @@ async function guardServerText(text: string, guard: OutputGuard | undefined): Pr
  * @param signal - Cancellation signal.
  * @param activateDirectTools - Optional promotion hook, invoked after a search.
  * @param outputGuard - Optional bound on server-authored payloads.
+ * @param nativeServers - Co-mounted native servers, as a list or a getter.
  * @returns The canonical tool result value.
  */
 async function executeProxy(
@@ -296,7 +335,7 @@ async function executeProxy(
   signal: AbortSignal | undefined,
   activateDirectTools?: SearchActivationHook,
   outputGuard?: OutputGuard,
-  nativeServers: readonly string[] = [],
+  nativeServers: NativeServersSource = [],
 ): Promise<string> {
   if (args.search !== undefined) {
     const options: { regex?: boolean; includeSchemas?: boolean; limit?: number; offset?: number } = {}
@@ -424,13 +463,16 @@ export type SearchActivationHook = (
  * @param registry - The gateway registry the tool delegates to.
  * @param activateDirectTools - Optional promotion hook, invoked after a search.
  * @param outputGuard - Optional bound on server-authored payloads.
+ * @param nativeServers - Co-mounted native servers: a snapshot, or a getter the
+ * tool calls each time it renders status. The getter is what keeps the conflict
+ * notice honest when a patch layer changes without this plugin reloading.
  * @returns A registry-ready tool definition.
  */
 export function createProxyTool(
   registry: McpGatewayRegistry,
   activateDirectTools?: SearchActivationHook,
   outputGuard?: OutputGuard,
-  nativeServers: readonly string[] = [],
+  nativeServers: NativeServersSource = [],
 ): ToolDefinition {
   return defineTool({
     name: PROXY_TOOL_NAME,

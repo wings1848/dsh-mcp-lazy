@@ -953,6 +953,58 @@ describe('M9 — activation connects only what asked to be resident', () => {
     }
   })
 
+  it('starts the adopted server and never the row it was moved out of (AD7)', async () => {
+    // The end state this whole feature produces, asserted as a pair of process
+    // counts. Two plugins would both answer for `same-server`; after the move,
+    // the row that used to serve it carries `disabled: true` and the server is
+    // this plugin's. So: the adopted entry starts when a call needs it (proving
+    // the move did not disable the wrong thing) and the disabled row produces no
+    // process at all (proving the duplicate really is inert).
+    //
+    // "Nothing happened" is the hard half and the one that has no symptom: a
+    // disabled server that still spawns looks exactly like a working one.
+    const adopted = fixtureServer('adopt-kept')
+    const dropped = fixtureServer('adopt-dropped', { disabled: true })
+
+    const disposers: (() => void)[] = []
+    const ctx = {
+      tools: { register: () => () => {} },
+      effect: (callback: () => () => void) => {
+        disposers.push(callback())
+      },
+    }
+
+    apply(ctx as never, { idleTimeout: 10, servers: [adopted.entry, dropped.entry] } as never)
+    try {
+      // Activation alone starts nothing: both entries are lazy.
+      assert.equal(startCount(adopted.counterFile), 0)
+      assert.equal(startCount(dropped.counterFile), 0)
+
+      const connections = new LazyConnections(() => 600_000, { startSweeper: false })
+      layers.push(connections)
+      connections.setQualifier(qualifiedToolName)
+      const registry = new McpGatewayRegistry(
+        { idleTimeout: 10, servers: [adopted.entry, dropped.entry] },
+        connections,
+      )
+      await registry.ensureConnected(adopted.entry, new AbortController().signal)
+      assert.equal(startCount(adopted.counterFile), 1, 'the adopted server must start')
+
+      // The disabled row is refused, and refused before anything is spawned.
+      await assert.rejects(
+        registry.ensureConnected(dropped.entry, new AbortController().signal),
+        /disabled in configuration/,
+      )
+      assert.equal(
+        startCount(dropped.counterFile),
+        0,
+        'the disabled entry must never produce a process',
+      )
+    } finally {
+      for (const dispose of disposers) dispose()
+    }
+  })
+
   it('gives every lifecycle but lazy an unlimited idle window', () => {
     const windowFor = (overrides: Partial<ServerEntry>): number =>
       resolveServer(

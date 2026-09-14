@@ -5,13 +5,20 @@
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
+  "bin": {
+    "dsh-mcp-lazy-adopt": "./scripts/adopt.mjs"
+  },
   "exports": {
     ".": {
       "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
     },
     "./cordis.patch.yml": "./cordis.patch.yml",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./adopt": {
+      "types": "./lib/adopt.d.ts",
+      "default": "./lib/adopt.js"
+    }
   },
   "files": [
     "lib",
@@ -75,7 +82,9 @@
     "@deepseek-ai/dsh-subprocess": "^0.1.5-rc.1",
     "@deepseek-ai/dsh-tools": "^0.1.5-rc.1",
     "@deepseek-ai/schemastery": "^3.18.2",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.0.0",
+    "js-yaml": "4.3.2",
     "typescript": "^5.9.0",
     "zod": "^4.0.0"
   },

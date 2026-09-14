@@ -138,6 +138,29 @@ describe('plugin exports', () => {
     )
     assert.equal(one.registered[0]!.description, many.registered[0]!.description)
   })
+
+  it('registers the exact surface the I1 invariant pins', () => {
+    // I1 names three numbers, and until now nothing in the suite checked them:
+    // `scripts/measure-surface.mjs` imports `lib/proxy-tool.js` directly, so it
+    // never runs `apply`, and every assertion above compares one registration
+    // against another. A change to the description, the parameter names, or the
+    // spec-to-JSON-Schema conversion inside `defineTool` would move the cost
+    // every session pays on every request and every test would still pass.
+    //
+    // The wire form is what the model is billed for, so it is measured the same
+    // way the script measures it.
+    const { ctx, registered } = fakeContext()
+    apply(ctx as never, resolved([{ serverName: 'demo', transport: 'stdio', command: 'demo-server' }]))
+    const tool = registered[0]!
+    const wire = JSON.stringify({
+      type: 'function',
+      function: { name: tool.name, description: tool.description, parameters: tool.parameters },
+    })
+
+    assert.equal(Object.keys(tool.parameters.properties ?? {}).length, 11)
+    assert.equal(wire.length, 1525)
+    assert.equal(Math.round(wire.length / 4), 381)
+  })
 })
 
 describe('configuration validation at load time', () => {
@@ -388,15 +411,30 @@ describe('AC16 — the plugin unloads cleanly', () => {
 })
 
 describe('conflict with @deepseek-ai/dsh-mcp-client', () => {
-  /** A context whose `get('loader')` returns the given entry list. */
+  /**
+   * A context whose `get('loader')` returns the given entry list.
+   *
+   * `setEntries` drives the loader the way a patch-layer edit does: the declared
+   * tree changes while this plugin keeps running untouched. That is the whole
+   * point of the two staleness cases below — `apply` is *not* called again, so a
+   * snapshot taken there cannot see the change.
+   */
   function contextWithLoader(entries: unknown[]): {
     ctx: FakeContext & { get: (name: string) => unknown }
     registered: ToolDefinition[]
+    setEntries: (next: unknown[]) => void
   } {
     const { ctx, registered } = fakeContext()
+    let current = entries
     return {
-      ctx: { ...ctx, get: (name: string) => (name === 'loader' ? { entries: () => entries } : undefined) },
+      ctx: {
+        ...ctx,
+        get: (name: string) => (name === 'loader' ? { entries: () => current } : undefined),
+      },
       registered,
+      setEntries: next => {
+        current = next
+      },
     }
   }
 
@@ -449,6 +487,47 @@ describe('conflict with @deepseek-ai/dsh-mcp-client', () => {
     const { ctx, registered } = fakeContext()
     apply(ctx as never, resolved([]))
     assert.doesNotMatch(await statusOf(registered), /dsh-mcp-client/)
+  })
+
+  it('reports a server added to the loader after this plugin loaded', async () => {
+    // The profile-layer case: the entry this plugin is mounted from has its own
+    // config changed, so the loader re-runs `apply` -- but the detection must
+    // not depend on that having happened.
+    const { ctx, registered, setEntries } = contextWithLoader([client('first')])
+    apply(ctx as never, resolved([]))
+    assert.match(await statusOf(registered), /first/)
+
+    setEntries([client('first'), client('added-later')])
+    assert.match(await statusOf(registered), /added-later/)
+  })
+
+  it('stops reporting a server the loader no longer declares', async () => {
+    // The home-layer case, and the defect this replaces: a co-mounted server is
+    // moved into this plugin's `servers` (or its row is disabled) by editing a
+    // layer whose change does *not* re-run this plugin's `apply`. A list
+    // snapshotted at load time kept naming it forever, so the status output went
+    // on claiming the saving was cancelled after it had been restored.
+    const { ctx, registered, setEntries } = contextWithLoader([client('moved-away')])
+    apply(ctx as never, resolved([{ serverName: 'moved-away', transport: 'stdio', command: 'x' }]))
+    assert.match(await statusOf(registered), /moved-away.*also|also.*configured/s)
+
+    setEntries([])
+    const text = await statusOf(registered)
+    assert.doesNotMatch(text, /dsh-mcp-client/)
+    assert.match(text, /moved-away/)
+  })
+
+  it('re-reads the loader on every render, not once per process', async () => {
+    // Guards the getter against being resolved eagerly at construction: three
+    // renders against three different trees must give three different answers.
+    const { ctx, registered, setEntries } = contextWithLoader([])
+    apply(ctx as never, resolved([]))
+    const seen: string[] = []
+    for (const name of ['a', 'ab', 'abc']) {
+      setEntries([client(name)])
+      seen.push(/\(([^)]*)\)/.exec(await statusOf(registered))?.[1] ?? '')
+    }
+    assert.deepEqual(seen, ['a', 'ab', 'abc'])
   })
 
   it('survives a context with no loader service at all', () => {

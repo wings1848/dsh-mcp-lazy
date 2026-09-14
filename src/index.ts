@@ -34,14 +34,18 @@ export const inject = ['tools']
 const LIFECYCLES = ['lazy', 'lazy-keep-alive', 'eager', 'keep-alive'] as const
 
 /**
- * Every field a server entry may carry.
+ * Every field a server entry may carry, as a set.
  *
  * schemastery passes unknown keys through untouched, so this list is the only
  * thing standing between a typo and a setting that silently does nothing. It
  * has to be kept in step with `ServerSchema` below; `plugin-load.test.ts` fails
  * if the two drift apart.
+ *
+ * Exported because `adopt` has to answer the same question from outside — is
+ * this row something this plugin can load? — and a second copy of the list would
+ * be a second thing to keep in step.
  */
-const KNOWN_SERVER_FIELDS: ReadonlySet<string> = new Set([
+export const KNOWN_SERVER_FIELDS: ReadonlySet<string> = new Set([
   'serverName',
   'transport',
   'command',
@@ -80,8 +84,11 @@ const KNOWN_PLUGIN_FIELDS: ReadonlySet<string> = new Set([
  * needs a different answer, so a generic "unknown field" message would leave the
  * reader to work it out. Silence is the one response that is never right: the
  * field would sit in the resolved config looking configured.
+ *
+ * Exported because `adopt` reports these as skip reasons, and the explanation it
+ * prints has to be the same one `apply` throws.
  */
-const MCP_CLIENT_ONLY_FIELDS: ReadonlyMap<string, string> = new Map([
+export const MCP_CLIENT_ONLY_FIELDS: ReadonlyMap<string, string> = new Map([
   [
     'reconnect',
     'dsh-mcp-lazy has no reconnect timer — a server that drops is restarted by the next call that needs it, and a server that fails to start is left alone for the failure-backoff window',
@@ -368,7 +375,12 @@ export function apply(ctx: Context, config: ConfigShape): void {
       registry,
       (query, options) => direct.activateFromSearch(query, options),
       outputGuard,
-      detectNativelyRegistered(ctx),
+      // A getter, not a snapshot. The loader re-runs the entries whose own config
+      // changed, and a co-mounted `dsh-mcp-client` row edited in *another* layer
+      // leaves this plugin's config untouched — so a value read here would keep
+      // reporting the old tree. Reading it per status render costs one tree walk
+      // and cannot go stale.
+      () => detectNativelyRegistered(ctx),
     ),
   )
 
