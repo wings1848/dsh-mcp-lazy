@@ -48,8 +48,14 @@ import { dirname, join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
-import { LAZY_PACKAGE, LAZY_PLUGIN, NATIVE_MCP_PLUGIN, parseComposedDump } from '../lib/adopt-compose.js'
+import {
+  LAZY_PACKAGE,
+  LAZY_PLUGIN,
+  NATIVE_MCP_PLUGIN,
+  parseComposedDump,
+} from '../lib/adopt-compose.js'
 import { findNativeRow } from '../lib/adopt-patch.js'
+import { basenameOf } from '../lib/adopt-paths.js'
 import { applyEdits, planAdoption, resolveNativeRows, summarizePlan } from '../lib/adopt.js'
 
 /** Exit codes, named so the intent survives a refactor. */
@@ -58,9 +64,6 @@ const EXIT = {
   skipped: 1,
   environment: 2,
 }
-
-/** This file's directory, for locating the repository root. */
-const here = dirname(fileURLToPath(import.meta.url))
 
 /** Print a message to stderr. */
 function report(message) {
@@ -349,8 +352,10 @@ function serversOf(text) {
   if (key === null) return { servers }
   const keyIndent = key[1].length
   const body = rest.slice(key.index + key[0].length)
-  const names = [...body.matchAll(new RegExp(`^\\s{${keyIndent + 1},}-\\s+serverName:\\s*(.+)$`, 'gm'))]
-  for (const match of names) servers.push({ serverName: match[1].trim().replace(/^['"]|['"]$/g, '') })
+  const pattern = new RegExp(`^\\s{${keyIndent + 1},}-\\s+serverName:\\s*(.+)$`, 'gm')
+  for (const match of body.matchAll(pattern)) {
+    servers.push({ serverName: match[1].trim().replace(/^['"]|['"]$/g, '') })
+  }
   return { servers }
 }
 
@@ -387,7 +392,9 @@ function writePlan(plan, digests) {
     const current = digestOf(file)
     if (current !== digests.get(file)) {
       throw new EnvironmentError(
-        `${file} changed since it was read (expected ${digests.get(file) ?? 'the file to exist'}, found ${current ?? 'nothing'}); nothing was written`,
+        `${file} changed since it was read ` +
+          `(expected ${digests.get(file) ?? 'the file to exist'}, ` +
+          `found ${current ?? 'nothing'}); nothing was written`,
       )
     }
   }
@@ -442,9 +449,12 @@ function writePlan(plan, digests) {
       }
     }
     for (const entry of staged) rmSync(entry.temporary, { force: true })
+    const them = stranded.length === 1 ? 'it' : 'them'
+    const noun = stranded.length === 1 ? 'file' : 'files'
     const recovery =
       stranded.length > 0
-        ? `; ${restored.length} file(s) were restored, but ${stranded.join(', ')} could not be — recover ${stranded.length === 1 ? 'it' : 'them'} from the .bak-${stamp}-before-adopt ${stranded.length === 1 ? 'file' : 'files'}`
+        ? `; ${restored.length} file(s) were restored, but ${stranded.join(', ')} could not be — ` +
+          `recover ${them} from the .bak-${stamp}-before-adopt ${noun}`
         : restored.length > 0
           ? `; ${restored.length} file(s) were restored from their backups`
           : '; no file was modified'
@@ -454,11 +464,6 @@ function writePlan(plan, digests) {
   }
 
   return { backups, written }
-}
-
-/** A file's name without its directory. */
-function basenameOf(file) {
-  return file.slice(file.lastIndexOf('/') + 1)
 }
 
 /** The `yyyymmdd-hhmmss` stamp the backup name carries. */
@@ -553,22 +558,23 @@ function renderPlan(result, options) {
     const what = plan.adoptions.map(adoption => adoption.source.serverName ?? adoption.source.id)
     lines.push('')
     lines.push(
-      `  ⚠ the row being disabled lives in the home layer ${result.homePatch}, which every profile reads.`,
+      `  ⚠ the row being disabled lives in the home layer ${result.homePatch}, which every ` +
+        'profile reads.',
     )
     lines.push(
       `    ${losing.length} other profile(s) do not mount ${LAZY_PACKAGE}, so they would lose ` +
         `${what.join(', ')} with no replacement: ${losing.join(', ')}.`,
     )
     lines.push(
-      `    Mount ${LAZY_PACKAGE} in those profiles, or move the row into ${options.profile}'s own layer, ` +
-        'if they need it.',
+      `    Mount ${LAZY_PACKAGE} in those profiles, or move the row into ` +
+        `${options.profile}'s own layer, if they need it.`,
     )
   }
   if (result.overlayNames !== undefined && result.overlayNames.length > 0) {
     lines.push('')
     lines.push(
-      `  note    ${result.overlayNames.length} row(s) come from a --patch overlay and are not handled: ` +
-        result.overlayNames.join(', '),
+      `  note    ${result.overlayNames.length} row(s) come from a --patch overlay ` +
+        `and are not handled: ${result.overlayNames.join(', ')}`,
     )
   }
   if (result.warnings.trim() !== '') {
@@ -693,8 +699,9 @@ function main() {
     if (!options.json) {
       report('')
       report(
-        `adopt: ${result.plan.blocked} row(s) should have moved and did not, so this is not a ` +
-          'complete move. Read the reasons above, fix what you can, or pass --allow-skip to accept them.',
+        `adopt: ${result.plan.blocked} row(s) should have moved and did not, so this is ` +
+          'not a complete move. Read the reasons above, fix what you can, or pass ' +
+          '--allow-skip to accept them.',
       )
     }
     return EXIT.skipped

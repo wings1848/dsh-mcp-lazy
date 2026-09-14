@@ -1,0 +1,84 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+
+  // oxlint parses the TypeScript sources, the `.mjs` entry points and the test
+  // sources with one rule set. `unicorn` and `oxc` are the plugins the default
+  // `correctness` category draws on; naming them keeps the set from drifting
+  // when oxlint changes its own defaults.
+  "plugins": ["typescript", "unicorn", "oxc"],
+
+  // Without this, `process` is an undefined global in every `.mjs` file and in
+  // the sources that reference it, which buries the rule that matters under
+  // false positives.
+  "env": { "node": true },
+
+  // oxlint's default severity for the `correctness` category is `warn` — measured,
+  // and the reason this line exists: everything below it in that category was
+  // scrolling past as a warning nobody fails on. Raising it is the point of the
+  // gate. `suspicious` and `pedantic` are measured and deliberately left off:
+  // adding `suspicious` alone produces 52 findings on this tree, 18 of them
+  // `unicorn/no-array-sort` (a preference about `[...a].sort()`) and 15
+  // `eslint/no-shadow`. Style, not bugs, and concentrated in files this change
+  // does not own.
+  "categories": { "correctness": "error" },
+
+  "rules": {
+    // The two rules that matter most here. `no-unused-vars` is on by default but
+    // only as a warning; `no-undef` is not reported at all without naming it.
+    "no-undef": "error",
+    "no-unused-vars": "error",
+
+    // A runaway guard, not a target. oxlint has no `max-len` — its length rules
+    // cap a file or a function, not a line — so the 100-column limit from
+    // `.editorconfig` is enforced by `scripts/check-style.mjs` instead. 1200 is
+    // above the largest file here (758 non-comment lines) by a wide margin, so
+    // it never fails a legitimate change; it only stops one file from becoming
+    // unreadable. Comments and blank lines are not counted.
+    "max-lines": ["error", { "max": 1200, "skipComments": true, "skipBlankLines": true }]
+  },
+
+  "overrides": [
+    // Six pre-existing findings in four files this change may not edit.
+    //
+    // `no-useless-fallback-in-spread` and `no-useless-spread` are genuine but
+    // cosmetic: dropping `?? {}` from a spread changes nothing, and
+    // `[...this.#states]` in `src/connection.ts` may well be a deliberate
+    // snapshot of a Map that is mutated while it is iterated — precisely the
+    // kind of "cleanup" this change must not make on someone else's behalf.
+    // `prefer-string-starts-ends-with` is readability, not correctness.
+    //
+    // Downgraded to `warn` rather than off, so they stay visible on every run.
+    {
+      "files": [
+        "src/adopt-patch.ts",
+        "src/command.ts",
+        "src/connection.ts",
+        "test/unit/connection.e2e.test.ts"
+      ],
+      "rules": {
+        "unicorn/no-useless-fallback-in-spread": "warn",
+        "unicorn/no-useless-spread": "warn",
+        "unicorn/prefer-string-starts-ends-with": "warn"
+      }
+    },
+
+    // One pre-existing finding: `import { join } from 'node:path'` is unused in
+    // this file. Downgraded rather than fixed because the file belongs to a
+    // parallel workstream — `warn` keeps it on screen without failing CI.
+    {
+      "files": ["test/unit/direct-tools.test.ts"],
+      "rules": { "no-unused-vars": "warn" }
+    }
+  ],
+
+  // `lib/` is the build output these sources compile to. Linting it would
+  // report every finding twice, in its transpiled shape.
+  "ignorePatterns": [
+    "lib/**",
+    "node_modules/**",
+    ".tmp/**",
+    ".scratch/**",
+    ".dist-check/**",
+    "coverage/**"
+  ]
+}

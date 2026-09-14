@@ -3,7 +3,8 @@
 ## Supported versions
 
 Only the latest released version of `dsh-mcp-lazy` is supported with security
-fixes. The package version is currently `0.1.0` (`package.json`).
+fixes. `package.json` is the source of truth for which version that is; this file
+does not repeat the number, because it has been out of date before.
 
 ## Reporting a vulnerability
 

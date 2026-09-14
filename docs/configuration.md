@@ -45,6 +45,7 @@ top-level YAML array of loader patch entries; `id` is the row the patch layer ta
 | `directTools` | `true` \| `false` \| `'search'` | `false` | Promotion default for every server; a server's own `directTools` wins. See below (`src/index.ts`, `src/registry.ts`). |
 | `outputGuard` | `true` \| `false` \| `{ enabled, maxBytes, maxLines }` | `true` | Bound server-authored output; `true` applies the built-in ceilings, `false` returns oversized output verbatim (`src/index.ts`, `src/output-guard.ts`). |
 | `servers` | array of server entries | `[]` | The server list; an empty list is legal and means there is nothing to route to (`src/index.ts`). |
+| `failureBackoffMs` | number ≥ 0 | `60000` | How long a server that failed to start is left alone before another automatic attempt, in milliseconds. `0` retries at once; an explicit `mcp({ connect })` bypasses the window either way (`src/index.ts`, `src/registry.ts`). |
 
 ## Per-server fields
 
@@ -189,7 +190,12 @@ a native tool is genuinely worth moving the prefix, not as a default worth reach
 **The consequence:** a promoted tool is a real tool in the request, so the tool-definition
 prefix changes and the prompt cache is invalidated from the first changed token
 (`src/schema.ts`, `src/index.ts`). `'search'` defers that change until the model goes looking
-for a tool; `freezeDirectTools: true` bounds the churn to one event (`src/direct-tools.ts`).
+for a tool. `freezeDirectTools: true` stops **new** names from being promoted after the first
+sync, which bounds the growth to one event — it does not pin the surface against a
+withdrawal. A tool the refreshed catalog no longer offers is removed from the native surface
+either way, because a native tool still routing to a name the server has dropped fails on
+every call, and a stable-but-broken registration is worse than one that disappears
+(`src/direct-tools.ts`).
 
 **Timing.** Promotion is evaluated at activation, after a live catalog refresh (a server's
 `notifications/tools/list_changed`), and for `'search'` servers after each `mcp({ search })`

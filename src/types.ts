@@ -38,9 +38,9 @@ export type ServerLifecycle = 'lazy' | 'lazy-keep-alive' | 'eager' | 'keep-alive
  *   tool, which is the only setting that keeps the request prefix constant.
  * - `true`: every (filtered) tool is registered natively.
  * - `string[]`: only the named tools are registered natively.
- * - `'search'`: tools are registered natively **but inactive**; `mcp({ search })`
- *   activates the ones it matches. This delays the prefix change until the model
- *   actually looks for a tool instead of paying it at startup.
+ * - `'search'`: tools are **staged, not registered**; `mcp({ search })` registers
+ *   the ones it matches. This delays the prefix change until the model actually
+ *   looks for a tool instead of paying it at startup.
  */
 export type DirectToolsSetting = boolean | string[] | 'search'
 
