@@ -307,5 +307,15 @@ describe('a catalog-changed callback that throws', () => {
     }
 
     assert.equal(connections.errors.get(entry.serverName), failure.message)
+
+    // Recording it is only half of not swallowing it: `status` has to report it,
+    // or the exception is visible to nobody but this test. The connection layer
+    // keeps its own map and the registry falls back to it — the registry's own
+    // map only ever hears about failures that passed through a connect attempt.
+    const status = registry.status().find(server => server.serverName === entry.serverName)
+    assert.equal(status?.lastError, failure.message)
+    // A server that is up but whose refresh threw is still a working server:
+    // report the reason without downgrading its state.
+    assert.equal(status?.state, 'connected')
   })
 })
