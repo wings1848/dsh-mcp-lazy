@@ -267,8 +267,18 @@ setting cannot sit in the configuration looking applied while nothing reads it.
 **Running both plugins is not an error, and that is the problem.** Nothing clashes: this
 plugin's tool is `mcp` and the other's are `mcp__<server>__<tool>`, so both load, both work,
 and the schemas this plugin exists to remove are sent anyway. Because there is no symptom,
-`mcp({})` names the servers it found configured on the other plugin and asks the model to
-pass that on. Disable the other plugin's rows, or move them here, to get the saving back.
+`mcp({})` warns about every server the other plugin has enabled — and the advice depends on what
+this plugin's own config says about it (`src/proxy-tool.ts`):
+
+| What `mcp({})` says | State | What to do |
+| --- | --- | --- |
+| *is configured both here and in* | enabled on both sides | remove it from one of the two |
+| *This gateway lists it with ``disabled: true``* | here, but switched off | clear that flag — adding a second entry with the same `serverName` is an error — or disable the native row |
+| *This gateway does not have it* | only on the other plugin | add it here, or disable the native row if you do not need it |
+
+The notice describes the other plugin's *mode*, not what is in the current request. A native row
+whose own config that plugin rejects — it requires `transport` plus `command` or `url`, not just
+`serverName` — registers no tools at all, and neither does one whose server is down.
 
 ```yaml
 # before: one row per server

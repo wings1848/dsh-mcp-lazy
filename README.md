@@ -80,7 +80,8 @@ the config-manager panel hardcodes that package name, `@hyzyn/dsh-codegraph` wri
 row, and a hand-written config follows the same convention. Such a row registers each MCP tool
 as a real tool, so its schemas enter every request — and a server listed in **both** places
 cancels the saving this plugin exists for, with no error and nothing to notice. (The `mcp({})`
-status output does warn you, which is how you usually find out.)
+status output does warn you — for any server the other plugin serves natively, whether or not
+this one has it too — which is how you usually find out.)
 
 `adopt` does the move for you:
 
@@ -195,7 +196,7 @@ The v1 boundary, stated plainly:
 
 ```bash
 pnpm install
-pnpm test          # builds, relinks the peer packages, runs 342 tests
+pnpm test          # builds, relinks the peer packages, runs 354 tests
 pnpm run check     # typecheck, lint, build, then type-check the test sources
 ```
 

@@ -73,7 +73,8 @@ dsh plugin --profile <你的profile> add dsh-mcp-lazy
 这个生态里写 MCP 配置的各方**都产出 `@deepseek-ai/dsh-mcp-client` 行**：config-manager 面板写死了
 这个包名、`@hyzyn/dsh-codegraph` 会写一条托管行、手写配置也照这个惯例来。这种行会把每个 MCP 工具
 注册成**真原生工具**，schema 因此进入每一次请求 —— 而同一台服务器在两边都配着，省 token 的效果就
-**静默归零**（不报错、不冲突，只有 `mcp({})` 的状态输出会提示你）。
+**静默归零**（不报错、不冲突，只有 `mcp({})` 的状态输出会提示你；只要另一个插件原生提供某台服务器
+就会提，不论这边有没有它）。
 
 `adopt` 命令替你做这次搬迁：
 
@@ -172,7 +173,7 @@ mcp({})                                # 状态：工具数 / 连接态 / 缓存
 
 ```bash
 pnpm install
-pnpm test          # 构建 → 重链 peer 包 → 342 个用例
+pnpm test          # 构建 → 重链 peer 包 → 354 个用例
 pnpm run check     # typecheck → lint → build → 再对测试源码做类型检查
 ```
 
