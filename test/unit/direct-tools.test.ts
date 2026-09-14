@@ -22,7 +22,7 @@ import { DirectToolRegistrar, createNativeTool } from '../../lib/direct-tools.js
 import { qualifiedToolName } from '../../lib/naming.js'
 import { createProxyTool } from '../../lib/proxy-tool.js'
 import { McpGatewayRegistry } from '../../lib/registry.js'
-import type { Config, ServerEntry, ToolMetadata } from '../../lib/types.js'
+import type { Config, ServerEntry, ToolCallResult, ToolMetadata } from '../../lib/types.js'
 
 const originalHome = process.env['DSH_HOME']
 
@@ -81,6 +81,27 @@ function registrarFor(
   return { registrar, registered }
 }
 
+/** A registrar that records which disposers the tool runtime actually called. */
+function recordingRegistrar(
+  registry: McpGatewayRegistry,
+  freeze = false,
+): { registrar: DirectToolRegistrar; registered: Map<string, ToolDefinition>; disposed: string[] } {
+  const registered = new Map<string, ToolDefinition>()
+  const disposed: string[] = []
+  const registrar = new DirectToolRegistrar(
+    registry,
+    definition => {
+      registered.set(definition.name, definition)
+      return () => {
+        disposed.push(definition.name)
+        registered.delete(definition.name)
+      }
+    },
+    freeze,
+  )
+  return { registrar, registered, disposed }
+}
+
 function tool(serverName: string, originalName: string, description = `${originalName} tool`): ToolMetadata {
   return {
     originalName,
@@ -93,6 +114,44 @@ function tool(serverName: string, originalName: string, description = `${origina
 const CATALOGS: Record<string, ToolMetadata[]> = {
   alpha: [tool('alpha', 'read_file'), tool('alpha', 'write_file')],
   beta: [tool('beta', 'search_docs'), tool('beta', 'fetch_page')],
+}
+
+/** A registry whose every `tools/call` answers with the same projected result. */
+async function registryReturningResult(
+  entries: ServerEntry[],
+  result: ToolCallResult,
+): Promise<McpGatewayRegistry> {
+  const connection = {
+    connect: async (entry: ServerEntry) => ({ tools: CATALOGS[entry.serverName] ?? [] }),
+    invokeTool: async () => result,
+    disconnect: async () => undefined,
+    isConnected: () => false,
+    dispose: async () => undefined,
+  }
+  const registry = new McpGatewayRegistry({ idleTimeout: 10, servers: entries }, connection)
+  for (const entry of entries) await registry.ensureConnected(entry).catch(() => undefined)
+  return registry
+}
+
+/**
+ * Call one tool twice: once through the proxy, once as a promoted native tool.
+ *
+ * Both halves share a registry and a catalog, so any difference in the text is
+ * a difference in the renderer and nothing else.
+ */
+async function bothPaths(result: ToolCallResult): Promise<{ proxy: string; native: string }> {
+  const entries = twoServers()
+  const registry = await registryReturningResult(entries, result)
+  const viaProxy = String(
+    await createProxyTool(registry).execute({ tool: 'read_file', server: 'alpha' }, {
+      signal: new AbortController().signal,
+    } as never),
+  )
+  const native = createNativeTool(registry, entries[0]!, CATALOGS['alpha']![0]!)
+  const viaNative = String(
+    await native.execute({ q: 'x' }, { signal: new AbortController().signal } as never),
+  )
+  return { proxy: viaProxy, native: viaNative }
 }
 
 describe('AC2b — directTools: off by default', () => {
@@ -350,5 +409,141 @@ describe('AC2b — promotion never breaks the proxy', () => {
     const { registrar, registered } = registrarFor(registry)
     assert.equal(registrar.activateFromSearch('anything').length, 0)
     assert.equal(registered.size, 0)
+  })
+})
+
+/**
+ * One projection, two paths.
+ *
+ * The proxy and a promoted native tool each used to carry a private copy of the
+ * same rendering logic, and the copies drifted: the native one dropped
+ * `structuredContent` entirely. Whether the model saw the structured answer or
+ * "returned no content" then depended on a configuration flag rather than on the
+ * server. These tests pin the single implementation.
+ */
+describe('AC-unify — one result projection for both paths', () => {
+  it('renders a structuredContent-only result identically on both paths', async () => {
+    const { proxy, native } = await bothPaths({
+      isError: false,
+      blocks: [],
+      structuredContent: { answer: 42, nested: { ok: true } },
+    })
+
+    assert.doesNotMatch(native, /returned no content/, 'structured output must not read as empty')
+    assert.notEqual(native.trim(), '')
+    assert.match(native, /"answer": 42/)
+    assert.equal(native, proxy, 'the same result must read the same on both paths')
+  })
+
+  it('uses one wording for a block that is not forwarded', async () => {
+    const { proxy, native } = await bothPaths({
+      isError: false,
+      blocks: [{ type: 'image', mimeType: 'image/png', bytes: 5 }],
+    })
+
+    assert.equal(
+      native,
+      '[image: image/png, 5 bytes — this gateway returns text only, so the pixels are ' +
+        'not forwarded]',
+    )
+    assert.equal(native, proxy)
+  })
+
+  it('agrees on text, error and audio results too', async () => {
+    const text = await bothPaths({ isError: false, blocks: [{ type: 'text', text: 'ok' }] })
+    assert.equal(text.native, text.proxy)
+    assert.equal(text.native, 'ok')
+
+    const failure = await bothPaths({ isError: true, blocks: [{ type: 'text', text: 'boom' }] })
+    assert.equal(failure.native, failure.proxy)
+    assert.equal(failure.native, 'alpha__read_file reported an error:\nboom')
+
+    const audio = await bothPaths({
+      isError: false,
+      blocks: [{ type: 'audio', mimeType: 'audio/wav', bytes: 9 }],
+    })
+    assert.equal(audio.native, audio.proxy)
+  })
+})
+
+/**
+ * Promotion has to be undoable.
+ *
+ * `#disposers` used to be drained only by `dispose()`, so a server that dropped
+ * or renamed a tool left a native tool behind that still sent the *old* name on
+ * the wire — a ghost that fails every call and never leaves the surface.
+ */
+describe('AC-unify — promotion is withdrawn when the catalog changes', () => {
+  it('withdraws a promoted tool the refreshed catalog no longer offers', async () => {
+    const entries = twoServers()
+    entries[0]!.directTools = true
+    const registry = await loadedRegistry(entries, CATALOGS)
+    const { registrar, registered, disposed } = recordingRegistrar(registry)
+
+    assert.deepEqual(registrar.sync().sort(), ['alpha__read_file', 'alpha__write_file'])
+    registry.recordRefreshedCatalog('alpha', { tools: [CATALOGS['alpha']![0]!] })
+
+    assert.deepEqual(registrar.sync(), [], 'the refresh promotes nothing new')
+    assert.equal(registered.has('alpha__write_file'), false, 'withdrawn tools stop being callable')
+    assert.deepEqual(disposed, ['alpha__write_file'], 'its own disposer is what unregisters it')
+    assert.equal(registrar.state.registered.has('alpha__write_file'), false)
+    assert.equal(registered.has('alpha__read_file'), true, 'the surviving tool is untouched')
+  })
+
+  it('follows a rename without leaving the old name behind', async () => {
+    const entries = twoServers()
+    entries[0]!.directTools = true
+    const registry = await loadedRegistry(entries, CATALOGS)
+    const { registrar, registered, disposed } = recordingRegistrar(registry)
+    registrar.sync()
+
+    registry.recordRefreshedCatalog('alpha', { tools: [tool('alpha', 'read_file_v2')] })
+    assert.deepEqual(registrar.sync(), ['alpha__read_file_v2'])
+    assert.equal(registered.has('alpha__read_file'), false)
+    assert.equal(registered.has('alpha__write_file'), false)
+    assert.deepEqual(disposed.sort(), ['alpha__read_file', 'alpha__write_file'])
+  })
+
+  it('leaves a tool alone while the refreshed catalog still offers it', async () => {
+    const entries = twoServers()
+    entries[0]!.directTools = true
+    const registry = await loadedRegistry(entries, CATALOGS)
+    const { registrar, registered, disposed } = recordingRegistrar(registry)
+    registrar.sync()
+
+    registry.recordRefreshedCatalog('alpha', { tools: [...CATALOGS['alpha']!].reverse() })
+    assert.deepEqual(registrar.sync(), [])
+    assert.equal(registered.size, 2)
+    assert.deepEqual(disposed, [], 'a refresh that keeps the tool must not churn the surface')
+  })
+
+  it('withdraws an activated search-mode tool when its server drops it', async () => {
+    const entries = twoServers()
+    entries[0]!.directTools = 'search'
+    const registry = await loadedRegistry(entries, CATALOGS)
+    const { registrar, registered, disposed } = recordingRegistrar(registry)
+    registrar.sync()
+    assert.deepEqual(registrar.activateFromSearch('read_file'), ['alpha__read_file'])
+
+    registry.recordRefreshedCatalog('alpha', { tools: [tool('alpha', 'write_file')] })
+    registrar.sync()
+    assert.equal(registered.has('alpha__read_file'), false)
+    assert.deepEqual(disposed, ['alpha__read_file'])
+  })
+
+  it('still withdraws under freezeDirectTools while refusing new names', async () => {
+    const entries = twoServers()
+    entries[0]!.directTools = true
+    const registry = await loadedRegistry(entries, CATALOGS)
+    const { registrar, registered, disposed } = recordingRegistrar(registry, true)
+    registrar.sync()
+
+    registry.recordRefreshedCatalog('alpha', {
+      tools: [CATALOGS['alpha']![0]!, tool('alpha', 'brand_new')],
+    })
+    assert.deepEqual(registrar.sync(), [])
+    assert.equal(registered.has('alpha__brand_new'), false, 'frozen still means no new names')
+    assert.equal(registered.has('alpha__write_file'), false, 'not callable after withdrawal')
+    assert.deepEqual(disposed, ['alpha__write_file'])
   })
 })
