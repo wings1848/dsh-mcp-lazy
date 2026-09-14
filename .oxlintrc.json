@@ -12,17 +12,19 @@
   // false positives.
   "env": { "node": true },
 
-  // oxlint's default is `correctness` at `error`; written out so that raising
-  // the floor is a visible decision rather than an inherited one. `suspicious`
-  // and `pedantic` are measured and deliberately left off: together they add 52
-  // findings to this tree, 18 of them `unicorn/no-array-sort` (a preference
-  // about `[...a].sort()`) and 15 `eslint/no-shadow`. Style, not bugs, and
-  // concentrated in files this change does not own.
+  // oxlint's default severity for the `correctness` category is `warn` — measured,
+  // and the reason this line exists: everything below it in that category was
+  // scrolling past as a warning nobody fails on. Raising it is the point of the
+  // gate. `suspicious` and `pedantic` are measured and deliberately left off:
+  // adding `suspicious` alone produces 52 findings on this tree, 18 of them
+  // `unicorn/no-array-sort` (a preference about `[...a].sort()`) and 15
+  // `eslint/no-shadow`. Style, not bugs, and concentrated in files this change
+  // does not own.
   "categories": { "correctness": "error" },
 
   "rules": {
-    // The two rules this repository most needed: a variable that is never read,
-    // and an identifier that does not exist.
+    // The two rules that matter most here. `no-unused-vars` is on by default but
+    // only as a warning; `no-undef` is not reported at all without naming it.
     "no-undef": "error",
     "no-unused-vars": "error",
 
@@ -36,7 +38,7 @@
   },
 
   "overrides": [
-    // Five pre-existing findings in three files this change may not edit.
+    // Six pre-existing findings in four files this change may not edit.
     //
     // `no-useless-fallback-in-spread` and `no-useless-spread` are genuine but
     // cosmetic: dropping `?? {}` from a spread changes nothing, and
