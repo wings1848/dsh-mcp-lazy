@@ -16,10 +16,11 @@
   // and the reason this line exists: everything below it in that category was
   // scrolling past as a warning nobody fails on. Raising it is the point of the
   // gate. `suspicious` and `pedantic` are measured and deliberately left off:
-  // adding `suspicious` alone produces 52 findings on this tree, 18 of them
-  // `unicorn/no-array-sort` (a preference about `[...a].sort()`) and 15
+  // adding `suspicious` alone produces 54 findings on this tree, 22 of them
+  // `unicorn/no-array-sort` (a preference about `[...a].sort()`) and 17
   // `eslint/no-shadow`. Style, not bugs, and concentrated in files this change
-  // does not own.
+  // does not own. Measured with
+  // `oxlint --config .oxlintrc.json -D suspicious src scripts test`.
   "categories": { "correctness": "error" },
 
   "rules": {

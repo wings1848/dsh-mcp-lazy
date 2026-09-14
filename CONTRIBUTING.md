@@ -59,7 +59,7 @@ All of these come from `package.json` `scripts`.
 | --- | --- |
 | `pnpm build` | `tsc -p tsconfig.json` — compiles `src/` to `lib/` with declarations and source maps. |
 | `pnpm typecheck` | The same project with `--noEmit` — type errors only, no output. |
-| `pnpm test` | `node --test "test/unit/*.test.ts"`. Runs `pretest` first (build, then `link-dsh`). 342 tests in 84 suites (`README.md`, `docs/design/parity-pi-mcp-adapter.md`). |
+| `pnpm test` | `node --test "test/unit/*.test.ts"`. Runs `pretest` first (build, then `link-dsh`). Reports 342 tests in 84 suites; `README.md` carries the same test count in its quick start. |
 | `pnpm test:types` | `tsc -p tsconfig.test.json` — type-checks the test sources as well, which `typecheck` does not cover. |
 | `pnpm check` | `typecheck` then `lint` then `build` then `test:types`, in that order. Run this before opening a pull request; CI runs the same command. |
 | `pnpm lint` | `oxlint src scripts test` (config: `.oxlintrc.json`), then `node scripts/check-style.mjs` for the rules in `.editorconfig` that oxlint does not implement — the 100-column limit, LF endings, trailing whitespace, final newline. |
@@ -103,6 +103,12 @@ formatter, so match the surrounding code rather than reformatting a file.
   `lib/` is gitignored, so build before running a single file directly:
   `pnpm run build && node --test test/unit/output-guard.test.ts`. (`pnpm test` covers
   this, because `pretest` builds.)
+- **A stale `lib/` fails green, not loudly.** Edit `src/`, skip the build, and the
+  suite runs the *previous* build and passes — measured: one source change left
+  `test/unit/adopt-paths.test.ts` at 6/6 green, and the same change went to 3
+  failures once `node --run build` ran. So a green run proves nothing unless the
+  build in front of it succeeded, which is why `check` and CI put the build ahead
+  of the tests rather than beside them.
 - A bug fix comes with a regression test that was observed to fail before the fix.
   Run the new test against the unpatched code and keep the failing output; that
   record is what distinguishes a regression test from decoration. Section 10 of

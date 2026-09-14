@@ -151,7 +151,7 @@ never needed for anything else:
 | --- | --- | --- | --- |
 | `regex` | Treat `search` as a regular expression rather than literal text. | `false` | — |
 | `includeSchemas` | Include each match's parameter summary in the result. | `true` | — |
-| `limit` | How many matches to return. | `12` | `40`; a larger `limit` is clamped, not an error |
+| `limit` | How many matches to return. | `12` | `40`; clamped into 1–40, never an error |
 | `offset` | Skip this many matches, for paging through a long result. | `0` | — |
 
 That one tool is the **whole** model-facing surface by default. `directTools` is

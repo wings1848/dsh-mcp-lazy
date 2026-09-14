@@ -149,9 +149,10 @@ export interface Config {
    * How long a failed server is left alone before an automatic retry, in
    * milliseconds. Defaults to {@link FAILURE_BACKOFF_MS}.
    *
-   * Not a user-facing setting: there is no configuration spelling for it, and
-   * an explicit `mcp({ connect })` always ignores it. It exists so a test can
-   * pin the window instead of waiting a minute.
+   * A supported setting: the plugin-level `failureBackoffMs` is the user-facing
+   * spelling, and `0` retries immediately. An explicit `mcp({ connect })` always
+   * ignores the window, so an operator who has just fixed a command does not
+   * have to wait it out.
    */
   failureBackoffMs?: number
 }
