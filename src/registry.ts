@@ -12,6 +12,7 @@
 
 import {
   buildCacheEntry,
+  CACHE_VERSION,
   computeConfigHash,
   loadMetadataCache,
   metadataCachePath,
@@ -52,6 +53,16 @@ import type {
  * the same failure is rediscovered each time.
  */
 export const FAILURE_BACKOFF_MS = 60_000
+
+/**
+ * What a canceled call is told when it never reached the connection layer.
+ *
+ * Deliberately the same sentence the connection layer produces for the same
+ * condition, so a caller that cancels reads one wording whether or not the
+ * attempt had already started — and so {@link McpGatewayRegistry} recognises
+ * both as a cancellation rather than a server failure.
+ */
+const CANCELED_BEFORE_CONNECT = 'the tool call was canceled before the server connected'
 
 /** What a live synchronous fetch from one connected server returns. */
 export interface LiveToolCatalog {
@@ -219,6 +230,13 @@ export class McpGatewayRegistry {
   readonly #errors = new Map<string, string>()
   /** When each server last failed to start, for the retry backoff. */
   readonly #failedAt = new Map<string, number>()
+  /**
+   * Servers whose catalog this session fetched itself.
+   *
+   * Their in-memory entry is newer than anything on disk by construction, so
+   * they are the ones a write-back is allowed to overwrite.
+   */
+  readonly #writtenServers = new Set<string>()
   readonly #failureBackoffMs: number
   /** Plugin-level `directTools`, used when a server does not set its own. */
   readonly #globalDirectTools: boolean | 'search' | undefined
@@ -248,7 +266,7 @@ export class McpGatewayRegistry {
       )
     }
 
-    this.#cache = loadMetadataCache() ?? { version: 1, servers: {} }
+    this.#cache = loadMetadataCache() ?? { version: CACHE_VERSION, servers: {} }
     this.#hydrateFromCache()
   }
 
@@ -300,6 +318,10 @@ export class McpGatewayRegistry {
     for (const server of this.#servers) {
       const cached = this.#cache.servers[server.entry.serverName]
       if (cached === undefined) continue
+      // Defence in depth. `loadMetadataCache` already refuses an entry whose
+      // tool list is not an array, and this runs during construction — where a
+      // throw is the plugin load failing, not one server going cold.
+      if (!Array.isArray(cached.tools)) continue
       if (cached.configHash !== computeConfigHash(server.entry)) continue
       const age = now - cached.cachedAt
       if (!Number.isFinite(age) || age > DEFAULT_CACHE_MAX_AGE_MS) continue
@@ -391,8 +413,46 @@ export class McpGatewayRegistry {
       named,
       catalog.instructions,
     )
-    saveMetadataCache(this.#cache)
+    this.#writtenServers.add(server.entry.serverName)
+    this.#persistCache()
     this.#rebuildDocuments()
+  }
+
+  /**
+   * Write this session's catalogs into the cache without discarding anyone else's.
+   *
+   * The one file is shared by every DSH process pointed at the same `$DSH_HOME`
+   * — a GUI and a CLI, or two `--profile` runs — so writing back the snapshot
+   * this registry read at construction would delete whatever the other process
+   * learned in the meantime, and search would keep degrading to a cold cache for
+   * servers that had already been discovered.
+   *
+   * Filtering the file against this configuration does not repair that: a profile
+   * is a process-local view and the cache path carries no profile segment, so a
+   * server this process does not know is far more likely to be another profile's
+   * server than a deleted one. The only entries removed here are the ones every
+   * reader already ignores — those past the age bound — which is also what keeps
+   * the file from growing forever once a server really is deleted.
+   *
+   * The on-disk shape is unchanged — same version, same entry fields — so an
+   * older build reads whatever this writes.
+   */
+  #persistCache(): void {
+    const now = Date.now()
+    const merged: Record<string, ServerCacheEntry> = {}
+    for (const [name, entry] of Object.entries(loadMetadataCache()?.servers ?? {})) {
+      if (now - entry.cachedAt > DEFAULT_CACHE_MAX_AGE_MS) continue
+      merged[name] = entry
+    }
+    // A server this session fetched always wins over the disk copy: the disk
+    // copy is either older or was written by a process that saw a stale catalog.
+    for (const name of this.#writtenServers) {
+      const own = this.#cache.servers[name]
+      if (own !== undefined) merged[name] = own
+    }
+    const next: MetadataCache = { version: CACHE_VERSION, servers: merged }
+    saveMetadataCache(next)
+    this.#cache = next
   }
 
   /**
@@ -560,6 +620,10 @@ export class McpGatewayRegistry {
     if (server === undefined) {
       throw new Error(`mcp-lazy: server "${entry.serverName}" is not configured`)
     }
+    // A call that was canceled before it got here has nobody left to receive the
+    // catalog. Connecting anyway would spawn a process for a caller that is
+    // already gone — and connecting is exactly what the rest of this method does.
+    if (signal?.aborted === true) throw new Error(CANCELED_BEFORE_CONNECT)
     // A server that just failed is left alone for a while. Without this, a
     // broken server is re-spawned and re-timed-out on every single call that
     // mentions one of its tools. An explicit `connect` overrides it, so fixing
@@ -573,11 +637,35 @@ export class McpGatewayRegistry {
       this.#recordLive(server, catalog)
       return catalog
     } catch (error) {
+      // A cancellation says nothing about the server, so it must not open the
+      // retry window: the next caller — who did not cancel anything — would be
+      // refused for a minute over a decision the previous caller made on
+      // purpose. The rejection still propagates, so the caller sees why.
+      if (this.#isCancellation(error, signal)) throw error
       const message = error instanceof Error ? error.message : String(error)
       this.#errors.set(entry.serverName, message)
       this.#failedAt.set(entry.serverName, Date.now())
       throw error
     }
+  }
+
+  /**
+   * Whether a failed `connect` was really the caller walking away.
+   *
+   * The signal is the authority: the connection layer releases a canceled caller
+   * immediately while the shared attempt keeps running, so by the time the
+   * rejection arrives that caller's signal is aborted by definition. The message
+   * is a second signal for a layer that produces the cancellation without the
+   * abort reaching this far, and it cannot mask a real failure — no transport
+   * produces that sentence on its own.
+   *
+   * @param error - What the connection layer rejected with.
+   * @param signal - The signal the call was made under, when it had one.
+   * @returns Whether this was a cancellation rather than a failure.
+   */
+  #isCancellation(error: unknown, signal: AbortSignal | undefined): boolean {
+    if (signal?.aborted === true) return true
+    return error instanceof Error && error.message === CANCELED_BEFORE_CONNECT
   }
 
   /**

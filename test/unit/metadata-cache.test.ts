@@ -3,8 +3,8 @@
  */
 
 import assert from 'node:assert/strict'
-import { readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { readdirSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { after, before, describe, it } from 'node:test'
 import { tempDir } from '../helpers/tmp.ts'
 import {
@@ -140,8 +140,19 @@ describe('persistence', () => {
 
   it('writes atomically and leaves no temp file behind', () => {
     const entry = stdioEntry({ serverName: 'atomic' })
-    saveMetadataCache({ version: CACHE_VERSION, servers: { atomic: buildCacheEntry(entry, [], undefined) } })
-    const raw = JSON.parse(readFileSync(metadataCachePath(), 'utf8')) as { version: number }
-    assert.equal(raw.version, CACHE_VERSION)
+    const cache = {
+      version: CACHE_VERSION,
+      servers: { atomic: buildCacheEntry(entry, [tool('one')], undefined) },
+    }
+    saveMetadataCache(cache)
+
+    // The temp file is the mechanism, so its absence is the actual claim: a
+    // rename that failed would leave both files behind and still round-trip.
+    assert.deepEqual(
+      readdirSync(dirname(metadataCachePath())).filter(name => name.endsWith('.tmp')),
+      [],
+      'the rename must consume the temporary file',
+    )
+    assert.deepEqual(loadMetadataCache(), cache)
   })
 })
