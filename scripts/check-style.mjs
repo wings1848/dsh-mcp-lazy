@@ -40,39 +40,44 @@ const EXTENSIONS = new Set(['.ts', '.mjs', '.json', '.yml', '.yaml'])
 const DEFAULT_MAX_LENGTH = 100
 
 /**
- * Files carrying lines over the column limit *before* this check existed.
+ * Per-file caps on how many lines may sit over the column limit.
  *
- * A baseline, not an exemption: these files belong to other workstreams, so
- * reflowing them here would collide with work in flight. Their offenders are
- * still counted and printed — they just do not fail the run. Deleting a file
- * from this list is how the burn-down is recorded.
+ * A burn-down, not an exemption. The number is what the file carried when this
+ * check landed, and a file whose count *grows* fails the run — the first shape
+ * of this was a set of whole-file exemptions, and it was too weak to be worth
+ * having: a 185-column line added to an exempt file passed `check` and CI, and
+ * the exempt set happened to contain every file the change it was written
+ * alongside had touched.
  *
- * `scripts/adopt.mjs` is deliberately absent: it was reflowed when this landed.
+ * A file absent from this map must be clean, so any offender fails: that covers
+ * every new file, and covered `scripts/adopt.mjs` when this landed. Lowering a
+ * number is how the burn-down is recorded; deleting the entry means the file is
+ * clean.
  */
-const BASELINE = new Set([
-  'scripts/link-dsh.mjs',
-  'scripts/measure-token-savings.mjs',
-  'src/adopt-patch.ts',
-  'src/adopt.ts',
-  'src/command.ts',
-  'src/connection.ts',
-  'src/direct-tools.ts',
-  'src/index.ts',
-  'src/naming.ts',
-  'src/proxy-tool.ts',
-  'src/registry.ts',
-  'src/schema.ts',
-  'src/search-ranking.ts',
-  'test/unit/adopt-command.test.ts',
-  'test/unit/adopt-rows.test.ts',
-  'test/unit/adopt-run.test.ts',
-  'test/unit/connection.e2e.test.ts',
-  'test/unit/declared-deps.test.ts',
-  'test/unit/direct-tools.test.ts',
-  'test/unit/metadata-cache.test.ts',
-  'test/unit/naming.test.ts',
-  'test/unit/plugin-load.test.ts',
-  'test/unit/proxy-tool.test.ts',
+const BASELINE = new Map([
+  ['scripts/link-dsh.mjs', 1],
+  ['scripts/measure-token-savings.mjs', 4],
+  ['src/adopt-patch.ts', 4],
+  ['src/adopt.ts', 11],
+  ['src/command.ts', 5],
+  ['src/connection.ts', 2],
+  ['src/direct-tools.ts', 3],
+  ['src/index.ts', 2],
+  ['src/naming.ts', 1],
+  ['src/proxy-tool.ts', 14],
+  ['src/registry.ts', 9],
+  ['src/schema.ts', 1],
+  ['src/search-ranking.ts', 4],
+  ['test/unit/adopt-command.test.ts', 8],
+  ['test/unit/adopt-rows.test.ts', 6],
+  ['test/unit/adopt-run.test.ts', 5],
+  ['test/unit/connection.e2e.test.ts', 5],
+  ['test/unit/declared-deps.test.ts', 1],
+  ['test/unit/direct-tools.test.ts', 1],
+  ['test/unit/metadata-cache.test.ts', 1],
+  ['test/unit/naming.test.ts', 1],
+  ['test/unit/plugin-load.test.ts', 2],
+  ['test/unit/proxy-tool.test.ts', 12],
 ])
 
 /**
@@ -164,16 +169,19 @@ function main(args) {
   const limit = maxLineLength()
   const failing = []
   const baselined = []
-  let baselineUsed = 0
 
   for (const file of sourceFiles()) {
     const offenders = offendersIn(file, limit)
     if (offenders.length === 0) continue
-    if (!BASELINE.has(file)) {
+    const allowed = BASELINE.get(file)
+    if (allowed === undefined) {
       failing.push({ file, offenders })
       continue
     }
-    baselineUsed += 1
+    if (offenders.length > allowed) {
+      failing.push({ file, offenders, allowed })
+      continue
+    }
     // The longest line is the interesting one in a summary; the count is the
     // number a burn-down moves.
     baselined.push({ file, count: offenders.length })
@@ -189,7 +197,13 @@ function main(args) {
           `file(s), not failing the run: ${baselined.map(entry => entry.file).join(', ')}\n`,
       )
     }
-    for (const { file, offenders } of failing) {
+    for (const { file, offenders, allowed } of failing) {
+      if (allowed !== undefined) {
+        process.stdout.write(
+          `${file}: ${offenders.length} line(s) over ${limit} columns, ` +
+            `${offenders.length - allowed} more than the baselined ${allowed}\n`,
+        )
+      }
       for (const { line, what } of offenders) {
         process.stdout.write(`${file}:${line}: ${what}\n`)
       }
@@ -197,7 +211,7 @@ function main(args) {
     // A stale entry is worth knowing about but is not a failure: the point of
     // the list is that it shrinks, and a parallel change reflowing a file is
     // not something this check should punish.
-    const stale = [...BASELINE].filter(file => !baselined.some(entry => entry.file === file))
+    const stale = [...BASELINE.keys()].filter(file => !baselined.some(entry => entry.file === file))
     if (stale.length > 0) {
       process.stderr.write(
         `style: ${stale.length} baseline entr(y/ies) no longer needed, delete them: ` +

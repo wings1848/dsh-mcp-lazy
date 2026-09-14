@@ -27,13 +27,16 @@ import { win32 } from 'node:path'
  *
  * `win32` is deliberate rather than the host's flavor. On Windows the two are
  * the same thing, so production behavior there is exactly `path.basename`; on
- * POSIX they differ only for an input containing a literal backslash, which
- * this process cannot produce — every path arriving here was read from the
- * filesystem by this same process, so it carries the host's own separators.
- * Asking for the Windows flavor unconditionally is what lets the Windows
- * contract be *tested* from a POSIX host, which is the entire reason the bug
- * above reached a release: with the host's flavor, the only input that
- * distinguishes the two behaviors is unreachable in CI.
+ * POSIX they differ for an input containing a literal backslash. That input is
+ * reachable — an earlier draft of this comment claimed otherwise on the grounds
+ * that every path here was read from the filesystem, but `--file` is resolved
+ * from `argv`, and `touch 'weird\patch.yml'` is legal on POSIX. The consequence
+ * is a staged name that differs from the file's own name (`.patch.yml.adopt.…`
+ * rather than `.weird\patch.yml.adopt.…`): still a legal name, and it only
+ * matters if two files in one plan collide, which `--file` cannot produce.
+ * Asking for the Windows flavor unconditionally is what buys the more valuable
+ * thing — the Windows contract being *testable* from a POSIX host, which is
+ * exactly what the bug above never had.
  *
  * @param file - Any path.
  * @returns The final component.

@@ -94,6 +94,16 @@ export interface GatewayConnection {
   /** Close every connection. */
   dispose: () => Promise<void>
   /**
+   * Last failure the connection layer saw per server, when it keeps one.
+   *
+   * Optional for the same reason as {@link GatewayConnection.onCatalogChanged}:
+   * a minimal layer may not track failures. The registry reports its own errors
+   * first and falls back to this, so a failure that never passed through a
+   * connect attempt — a tool-list refresh whose listener threw, say — still
+   * reaches `status` instead of dying in a private map nothing reads.
+   */
+  errors?: ReadonlyMap<string, string>
+  /**
    * Observe a server's live tool-list changes.
    *
    * Optional so a minimal embedded layer can omit it; the registry asks for it
@@ -427,12 +437,25 @@ export class McpGatewayRegistry {
    * learned in the meantime, and search would keep degrading to a cold cache for
    * servers that had already been discovered.
    *
+   * "Anyone else's" is a claim about the ordinary case, not a guarantee: the
+   * read-modify-write below takes no lock, so two processes writing at the same
+   * instant can still lose each other's newest entries. Measured with two real
+   * processes writing 40 servers each: 45 of 80 entries survived. A lost entry
+   * costs one reconnect and a cold search for that server, never a wrong answer,
+   * which is why this is not locked — the file is a cache, and a lock here would
+   * put a shared filesystem in the way of every tool call.
+   *
    * Filtering the file against this configuration does not repair that: a profile
    * is a process-local view and the cache path carries no profile segment, so a
    * server this process does not know is far more likely to be another profile's
    * server than a deleted one. The only entries removed here are the ones every
    * reader already ignores — those past the age bound — which is also what keeps
    * the file from growing forever once a server really is deleted.
+   *
+   * A file written by a future `CACHE_VERSION` is read as "no cache" and then
+   * rewritten in this version's shape, so an older build can replace a newer
+   * file rather than merge with it. That is the pre-existing version-gate
+   * behavior, not something the merge introduced.
    *
    * The on-disk shape is unchanged — same version, same entry fields — so an
    * older build reads whatever this writes.
@@ -659,6 +682,13 @@ export class McpGatewayRegistry {
    * abort reaching this far, and it cannot mask a real failure — no transport
    * produces that sentence on its own.
    *
+   * The signal test over-approximates on purpose. A caller who cancels at the
+   * same moment the server genuinely fails is read as a cancellation, so that
+   * failure is neither reported in `status` nor given a backoff window. The cost
+   * is one extra attempt against a server that is already broken; reading it the
+   * other way round would refuse a caller who did nothing wrong, for a minute,
+   * which is the bug this exists to fix.
+   *
    * @param error - What the connection layer rejected with.
    * @param signal - The signal the call was made under, when it had one.
    * @returns Whether this was a cancellation rather than a failure.
@@ -803,7 +833,9 @@ export class McpGatewayRegistry {
     return this.#servers.map(server => {
       const known = this.#known.get(server.entry.serverName)
       const connected = this.#connection?.isConnected(server.entry.serverName) ?? false
-      const error = this.#errors.get(server.entry.serverName)
+      const error =
+        this.#errors.get(server.entry.serverName) ??
+        this.#connection?.errors?.get(server.entry.serverName)
       const status: ServerStatus = {
         serverName: server.entry.serverName,
         state: server.entry.disabled === true ? 'disconnected' : connected ? 'connected' : error !== undefined ? 'failed' : 'disconnected',
