@@ -144,6 +144,21 @@ mcp({ instructions: "chrome" })        # the server's own usage notes
 mcp({})                                # status: tool count, connection state, cache age
 ```
 
+Seven of the 11 are the actions above. The other four shape a `search` and are
+never needed for anything else:
+
+| Parameter | Meaning | Default | Limit |
+| --- | --- | --- | --- |
+| `regex` | Treat `search` as a regular expression rather than literal text. | `false` | — |
+| `includeSchemas` | Include each match's parameter summary in the result. | `true` | — |
+| `limit` | How many matches to return. | `12` | `40`; a larger `limit` is clamped, not an error |
+| `offset` | Skip this many matches, for paging through a long result. | `0` | — |
+
+That one tool is the **whole** model-facing surface by default. `directTools` is
+the opt-in that promotes chosen server tools into real native tools instead —
+see [docs/configuration.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/configuration.md)
+for what it accepts, and why the default is the cheap choice.
+
 ## Documentation
 
 | | |

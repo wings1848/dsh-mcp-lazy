@@ -229,7 +229,7 @@ node scripts/measure-surface.mjs 3
 2. 对 disabled 服务器 `connect` 会 throw，模型看到「工具失败」而非可读诊断。
 3. npm 装了第二份 `dsh-tools`（rc.2 vs 运行时 rc.1），类身份不匹配隐患 → `scripts/link-dsh.mjs`。
 4. `sweepIdle` 直接读窗口缓存而不是走解析器，导致**所有服务器都被当成「永不回收」**。
-5. `invoke` 要求目录已存在，冷启动时第一个调用必然失败 → `discoverAndResolve` 按需发现。
+5. `mcp({ tool })` 要求目录已存在，冷启动时第一个调用必然失败 → `discoverAndResolve` 按需发现。
 6. `defineTool` 收的是 DSL 不是裸 JSON Schema，原生提升静默失败 → `toParameterSpec` 转换器。
 7. 刷新信号的订阅只有 `apply()` 里接了，测试与任何直接构造 registry 的调用方都不会收到 → 订阅改为 registry 自己拥有。
 
@@ -271,20 +271,20 @@ node scripts/measure-surface.mjs 3
 ### 功能
 - **AC1（A）** 冷启动零连接：配置 3 台服务器后启动 DSH，`ps` 中不出现任何 MCP 子进程，且日志无 `mcp__*` 工具注册。
 - **AC2（A）** 工具面恒定（默认路径）：任何时刻（未连接/已连接/已回收/服务器增删工具后）`ctx.tools.schemas()` 中本插件贡献的工具**恒为 1 个**，名字与 JSON schema 逐字节相同。
-- **AC2b（A）** direct 语义（仅当配置 `directTools`）：`true`/`string[]` 按选择注册真原生工具；`"search"` 以 inactive 注册、被 `mcp({ search })` 命中后激活并可直接调用；`freezeDirectTools: true` 时初始同步后的元数据更新**不改变**工具面。
+- **AC2b（A）** direct 语义（仅当配置 `directTools`）：`true`/`string[]` 按选择注册真原生工具；`"search"` **只暂存（staged），不注册**，被 `mcp({ search })` 命中后才注册、并可直接调用；`freezeDirectTools: true` 时初始同步后的元数据更新**不改变**工具面。
 - **AC3（A）** 离线搜索：在**没有任何服务器进程**的情况下 `mcp({ search: "screenshot" })` 返回命中（来自磁盘缓存），且不产生 spawn。
 - **AC4（A）** 懒启动：首次 `mcp({ tool, args })` 才 spawn；第二次命中复用同一连接（断言 pid 不变）。
 - **AC5（A）** 元数据刷新：服务器变更工具列表（`notifications/tools/list_changed` 或重启后 `connect`）→ 缓存更新，`search` 结果随之变化。
 - **AC6（A）** 空闲回收：把 `idleTimeout` 设为最小值，闲置到期后子进程退出、连接释放；再次调用能重新连上并成功。
 - **AC7（A）** 在途保护：长调用期间即使超过 `idleTimeout` 也不回收（`inFlight>0`），调用正常完成。
 - **AC8（A）** 错误面：未知名 / 歧义名（两台服务器同名工具）/ 服务器崩溃 → 三类确定性诊断文案，绝不返回伪造成功。
-- **AC9（A）** 结果投影：文本按块序返回；图片在模型支持且 attachment 可用时进入会话，否则给明确诊断文本（与 `dsh-mcp-client` 行为一致）。
+- **AC9（A）** 结果投影：文本按块序返回；图片**未实现，也不再计划实现**——投影层只输出一行诊断文本（类型 + 字节数），不转发像素（`src/proxy-tool.ts` 的 image 分支；口径以 `README.md`「Known Limitations」为准）。
 - **AC10（A）** 分页：`search` 的 `limit`/`offset` 生效，默认 12、上限 40；超限被裁剪而非报错。
 
 ### 成本（本插件的存在理由）
 - **AC11（M）** token 对比：同一组 3 台服务器，`dsh-mcp-client` 与 `dsh-mcp-lazy` 各跑一次相同会话，量出「工具定义占用 token」下降 ≥ 90%（基线用 `dsh-token-meter` 或请求体的 tools 段字符数）。
 - **AC12（M）** 内存对比：同配置下 DSH 常驻 RSS 与 MCP 子进程数：冷启动为 0 个子进程；稳定态只在被调用过的服务器上 > 0。
-- **AC13（M）** KV cache 稳定：连续多轮会话中，工具定义前缀不变（AC2 的运行时体现）；`search`/`invoke` 的结果只追加在尾部。
+- **AC13（M）** KV cache 稳定：连续多轮会话中，工具定义前缀不变（AC2 的运行时体现）；`mcp({ search })` / `mcp({ tool })` 的结果只追加在尾部。
 
 ### 工程质量
 - **AC14（A）** `pnpm/npm run typecheck` 与 `build` 干净通过；`test` 全绿（含 AC1–AC10 的自动化用例）。
@@ -305,7 +305,7 @@ node scripts/measure-surface.mjs 3
 | M0 | 骨架 + 单代理工具注册（无连接） | ✅ **已完成** — 69 个自动化用例全绿；实测恒定成本 **381 token** |
 | M1 | 缓存层 | ✅ **已完成**（与 M0 同步落地）— AC3 通过，冷缓存路径亦有覆盖 |
 | M2 | 懒连接 + 调用 | ✅ 已完成 — AC1、AC4、AC8、AC9 通过（真实进程） |
-| M3 | 生命周期（空闲回收 + 断线重连） | ✅ 已完成 — AC6、AC7 通过 |
+| M3 | 生命周期（空闲回收） | ✅ 已完成 — AC6、AC7 通过。**断线重连未实现，也不在计划内**：`src/index.ts:95` 写明本插件没有重连定时器，掉线的服务器由下一次需要它的调用重新拉起，启动失败的服务器只等失败退避窗口；`reconnect` 字段被明确拒绝并给出替代做法 |
 | M4 | 刷新 / 分页 / 冲突语义 / directTools | ✅ 已完成 — AC5、AC10、AC17、AC2b 通过 |
 | M5 | 成本度量 + 文档 | ✅ 已完成 — AC11 实测 92.8%；AC12/AC18 有测试 |
 
@@ -317,7 +317,7 @@ node scripts/measure-surface.mjs 3
 |---|---|---|
 | 动态工具注册 vs KV cache | 省钱反被 cache 击穿 | 默认恒定单工具（AC2 守住）；directTools 为显式可选 + `freezeDirectTools` 兜底 |
 | fork 上游漂移 | 官方修 bug 拿不到 | 只改「注册什么」，连接/传输层保持与上游 1:1，便于 rebase；记录 upstream 版本 |
-| 缓存陈旧导致模型按旧 schema 调用 | 调用失败 | 缓存带 `configHash` + TTL；`invoke` 前对未知工具做一次实时校验；失败信息给出刷新动作 |
+| 缓存陈旧导致模型按旧 schema 调用 | 调用失败 | 缓存带 `configHash` + TTL；`mcp({ tool })` 前对未知工具做一次实时校验；失败信息给出刷新动作 |
 | 代理工具 schema 过大 | 恒定成本上升 | `mcp` 工具参数保持扁平（tool/args/server/search/describe/limit/offset），实测目标 ≤ 400 token |
 | 空闲回收误杀长任务 | 数据/进度丢失 | `inFlight` 计数（AC7）+ 关闭前 quiesce |
 | 与官方 MCP 插件并存时的命名 | 工具名冲突 | 各自 `serverName` 命名空间；重复即报错（AC17） |

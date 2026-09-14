@@ -8,7 +8,7 @@
 # `serverName` / `transport` / `command` / `args` / `env` / `cwd` / `url` /
 # `headers` / `toolCallTimeoutMs` keep their meaning; the lazy-specific fields
 # (`lifecycle`, `idleTimeout`, `directTools`, `includeTools`, `excludeTools`,
-# `searchKeywords`, `disabled`) are new.
+# `searchKeywords`, `disabled`, `debug`) are new.
 - insert:
     - id: mcp-lazy
       name: 'dsh-mcp-lazy'

@@ -129,6 +129,19 @@ mcp({ instructions: "chrome" })        # 服务器自己的说明
 mcp({})                                # 状态：工具数 / 连接态 / 缓存年龄
 ```
 
+11 个里，7 个就是上面这些动作。剩下 4 个只用来调节 `search`，别的地方用不到：
+
+| 参数 | 含义 | 默认值 | 上限 |
+| --- | --- | --- | --- |
+| `regex` | 把 `search` 当正则表达式，而不是字面文本。 | `false` | — |
+| `includeSchemas` | 在结果里带上每个命中工具的参数字段摘要。 | `true` | — |
+| `limit` | 返回多少条命中。 | `12` | `40`；写大了会被裁到 40，不报错 |
+| `offset` | 跳过前多少条命中，用来翻长结果。 | `0` | — |
+
+默认情况下，这一个工具就是**全部**模型可见的工具面。`directTools` 是可选项，
+能把挑出来的服务器工具提升成真正的原生工具 —— 它能取哪些值、以及为什么默认更省，
+见 [docs/configuration.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/configuration.md)。
+
 ## 文档
 
 | | |

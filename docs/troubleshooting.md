@@ -55,8 +55,9 @@ waiting out the window (`src/registry.ts`, `src/proxy-tool.ts`). After the windo
 the next automatic attempt is allowed too; a successful connect clears both the error and
 the failure timestamp (`src/registry.ts`).
 
-The window is not configurable. `failureBackoffMs` exists in the resolved config type only
-so a test can pin it; there is no user-facing spelling (`src/types.ts`).
+The window is configurable: `failureBackoffMs` (number, milliseconds, minimum `0`, default
+`60000`) sets how long a server that failed to start is left alone. `0` removes the wait
+entirely, so the next call retries at once (`src/index.ts`, `src/registry.ts`).
 
 ## Where the stdio child's stderr goes
 

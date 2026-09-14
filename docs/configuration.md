@@ -45,6 +45,7 @@ top-level YAML array of loader patch entries; `id` is the row the patch layer ta
 | `directTools` | `true` \| `false` \| `'search'` | `false` | Promotion default for every server; a server's own `directTools` wins. See below (`src/index.ts`, `src/registry.ts`). |
 | `outputGuard` | `true` \| `false` \| `{ enabled, maxBytes, maxLines }` | `true` | Bound server-authored output; `true` applies the built-in ceilings, `false` returns oversized output verbatim (`src/index.ts`, `src/output-guard.ts`). |
 | `servers` | array of server entries | `[]` | The server list; an empty list is legal and means there is nothing to route to (`src/index.ts`). |
+| `failureBackoffMs` | number ≥ 0 | `60000` | How long a server that failed to start is left alone before another automatic attempt, in milliseconds. `0` retries at once; an explicit `mcp({ connect })` bypasses the window either way (`src/index.ts`, `src/registry.ts`). |
 
 ## Per-server fields
 
