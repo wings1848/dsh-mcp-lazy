@@ -33,6 +33,10 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # `check` is typecheck -> lint -> build -> test:types. Lint is inside it
+      # (`oxlint`, then `scripts/check-style.mjs` for the 100-column limit that
+      # `.editorconfig` declares), so there is deliberately no separate step:
+      # a second one would run the same command twice on all three Node versions.
       - run: pnpm run check
       # No DSH installation exists on a runner. scripts/link-dsh.mjs notices and
       # leaves the registry copies of the peer packages in place, which is enough

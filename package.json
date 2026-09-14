@@ -60,7 +60,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test \"test/unit/*.test.ts\"",
     "test:types": "tsc -p tsconfig.test.json",
-    "check": "node --run typecheck && node --run build && node --run test:types",
+    "check": "node --run typecheck && node --run lint && node --run build && node --run test:types",
+    "lint": "oxlint src scripts test && node scripts/check-style.mjs",
     "link-dsh": "node scripts/link-dsh.mjs",
     "measure:surface": "node scripts/measure-surface.mjs",
     "measure:savings": "node scripts/measure-token-savings.mjs",
@@ -85,6 +86,7 @@
     "@deepseek-ai/schemastery": "^3.18.2",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.0.0",
+    "oxlint": "^1.82.0",
     "typescript": "^5.9.0",
     "zod": "^4.0.0"
   },
