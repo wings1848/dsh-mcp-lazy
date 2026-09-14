@@ -16,7 +16,7 @@ import { DirectToolRegistrar } from './direct-tools.js'
 import { qualifiedToolName } from './naming.js'
 import { OutputGuard } from './output-guard.js'
 import { createProxyTool } from './proxy-tool.js'
-import { McpGatewayRegistry, resolveServer } from './registry.js'
+import { McpGatewayRegistry, FAILURE_BACKOFF_MS, resolveServer } from './registry.js'
 import {
   DEFAULT_IDLE_TIMEOUT_MINUTES,
   DEFAULT_TOOL_CALL_TIMEOUT_MS,
@@ -73,9 +73,12 @@ const KNOWN_PLUGIN_FIELDS: ReadonlySet<string> = new Set([
   'directTools',
   'outputGuard',
   'servers',
-  // Not in the schema: supplied directly by tests and SDK callers.
-  'idleWindowMs',
   'failureBackoffMs',
+  // Deliberately absent from the schema below: supplied directly by tests and
+  // SDK callers, never spelled in a config file. It is whitelisted so those
+  // callers keep working, and validated by `assertPluginConfig` so a scalar
+  // cannot pass silently.
+  'idleWindowMs',
 ])
 
 /**
@@ -157,6 +160,15 @@ export const Config: z<Partial<ConfigShape>, ConfigShape> = z.object({
       }),
     ])
     .default(true),
+  /**
+   * How long a server that failed to start is left alone, in milliseconds.
+   *
+   * Declared here rather than left to the registry's fallback: the registry has
+   * always honoured it, but without a schema entry a config file carrying it
+   * lost the value before `apply` ever saw it — the setting looked supported and
+   * was silently dropped. `0` disables the window, so the next call retries.
+   */
+  failureBackoffMs: z.number().min(0).default(FAILURE_BACKOFF_MS),
   servers: z.array(ServerSchema).default([]),
 })
 
@@ -248,6 +260,17 @@ function detectNativelyRegistered(ctx: Context): string[] {
  */
 function assertPluginConfig(config: ConfigShape | undefined): void {
   if (config === undefined || config === null) return
+  // Checked before the whitelist below, because `idleWindowMs` *is* whitelisted
+  // and a scalar spelling of it used to sail straight through: the field is a
+  // function seam, so `apply` dropped anything else on the floor and the caller
+  // never learned the window was not applied.
+  if ('idleWindowMs' in config && typeof config.idleWindowMs !== 'function') {
+    throw new Error(
+      'mcp-lazy: "idleWindowMs" only accepts a function — it resolves a server\'s idle ' +
+        'window in milliseconds and is meant for tests and SDK callers. Set `idleTimeout` ' +
+        '(minutes) instead, globally or per server.',
+    )
+  }
   for (const field of Object.keys(config)) {
     if (KNOWN_PLUGIN_FIELDS.has(field)) continue
     throw new Error(
@@ -329,7 +352,9 @@ export function apply(ctx: Context, config: ConfigShape): void {
     outputGuard: config?.outputGuard ?? true,
     ...(config?.directTools === undefined ? {} : { directTools: config.directTools }),
     ...(typeof config?.idleWindowMs === 'function' ? { idleWindowMs: config.idleWindowMs } : {}),
-    ...(config?.failureBackoffMs === undefined ? {} : { failureBackoffMs: config.failureBackoffMs }),
+    // The schema supplies the default; this entry point is also called directly
+    // with a hand-built config, so the fallback stays.
+    failureBackoffMs: config?.failureBackoffMs ?? FAILURE_BACKOFF_MS,
   }
   assertServerConfig(resolved.servers)
 
