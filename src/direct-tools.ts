@@ -15,15 +15,23 @@
  *   never pays for the change.
  * - `freezeDirectTools` stops promotion after the first pass, which bounds the
  *   prefix churn to a single event even if the server keeps editing its catalog.
+ *   It bounds only what the surface *gains*: a tool the server has withdrawn is
+ *   unregistered whether or not freezing is on, because its definition still
+ *   names the tool the server used to have.
+ *
+ * Every sync re-derives both directions from the current catalogs, so promotion
+ * is a projection of "what configuration asks for and the servers still offer",
+ * not a running log of everything ever promoted.
  *
  * @module dsh-mcp-lazy/direct-tools
  */
 
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { OutputGuard } from './output-guard.js'
+import { renderToolResult } from './projection.js'
 import { McpGatewayRegistry } from './registry.js'
 import { summarizeParameters } from './registry.js'
-import type { ProjectedBlock, ServerEntry, ToolCallResult, ToolMetadata } from './types.js'
+import type { ServerEntry, ToolMetadata } from './types.js'
 
 /** How many native tools have been registered, for status and callers. */
 export interface DirectToolState {
@@ -33,43 +41,6 @@ export interface DirectToolState {
   staged: Set<string>
   /** Set once promotion has stopped accepting new tools. */
   frozen: boolean
-}
-
-/**
- * Render one non-text block as text, matching the proxy's projection.
- *
- * @param block - The projected block.
- * @returns One line of text.
- */
-function renderBlock(block: ProjectedBlock): string {
-  switch (block.type) {
-    case 'text':
-      return block.text
-    case 'image':
-      return `[image: ${block.mimeType}, ${block.bytes} bytes — not forwarded]`
-    case 'audio':
-      return `[audio: ${block.mimeType}, ${block.bytes} bytes — not forwarded]`
-    case 'resource_link':
-      return `[resource: ${block.name === undefined ? block.uri : `${block.name} <${block.uri}>`}]`
-    case 'unknown':
-      return `[${block.detail}]`
-  }
-}
-
-/**
- * Render a native tool's result.
- *
- * @param toolName - The tool that ran.
- * @param result - The live result.
- * @returns Text for the model.
- */
-function renderNativeResult(toolName: string, result: unknown): string {
-  if (typeof result === 'string') return result
-  const projected = result as Partial<ToolCallResult>
-  if (!Array.isArray(projected.blocks)) return JSON.stringify(result, null, 2)
-  const body = projected.blocks.map(renderBlock).filter(text => text !== '').join('\n')
-  if (projected.isError === true) return `${toolName} reported an error:\n${body || '(no detail)'}`
-  return body === '' ? `${toolName} returned no content.` : body
 }
 
 /**
@@ -242,7 +213,7 @@ export function createNativeTool(
           (args ?? {}) as Record<string, unknown>,
           exec.signal,
         )
-        const rendered = renderNativeResult(tool.qualifiedName, result)
+        const rendered = renderToolResult(tool.qualifiedName, result)
         // A promoted tool is a first-class tool, so it has to honour the same
         // output ceiling as the proxy path — otherwise promotion becomes a way
         // to bypass it.
@@ -308,15 +279,29 @@ export class DirectToolRegistrar {
   }
 
   /**
-   * Register everything configuration asks for right now.
+   * Bring the native surface in line with what configuration asks for now.
    *
    * Called after any catalog change. In `'search'` mode this only *stages*
    * names: staging is bookkeeping, and the model sees nothing until a search
    * matches one.
    *
+   * A tool the server has since dropped is *withdrawn* here, not merely left
+   * alone. Promotion used to be add-only, which turned a removed or renamed tool
+   * into a ghost: its definition is a closure over the old name, so every call
+   * sent a name the server no longer has — an error the model keeps paying for,
+   * still occupying the model-facing surface.
+   *
+   * Freeze does not exempt a withdrawal. It bounds the surface *growing* again,
+   * and a registration the server has withdrawn is not growth; keeping it would
+   * trade a working surface for a stable-but-broken one. A name withdrawn this
+   * way is still refused if it later comes back, because freeze is about
+   * additions.
+   *
    * @returns The qualified names registered by this call.
    */
   sync(): string[] {
+    this.#withdrawUnselected()
+
     if (this.#freeze && this.#state.frozen) return []
     const added: string[] = []
 
@@ -336,6 +321,61 @@ export class DirectToolRegistrar {
 
     if (added.length > 0 || this.#freeze) this.#state.frozen = true
     return added
+  }
+
+  /**
+   * The qualified names the current configuration and catalogs still want.
+   *
+   * Search-mode tools count as wanted whether or not a search has activated
+   * them: activation is what makes one native, so only its server dropping it
+   * should take it away again.
+   *
+   * @returns Qualified names that must stay native.
+   */
+  #desiredNames(): Set<string> {
+    const desired = new Set<string>()
+    for (const selection of this.#registry.directToolSelections()) {
+      for (const tool of selection.tools) desired.add(tool.qualifiedName)
+    }
+    for (const serverName of this.#registry.searchModeServers()) {
+      for (const tool of this.#registry.toolsOf(serverName)) desired.add(tool.qualifiedName)
+    }
+    return desired
+  }
+
+  /**
+   * Unregister every native tool the current selection no longer asks for, each
+   * through the disposer its own registration returned.
+   */
+  #withdrawUnselected(): void {
+    const desired = this.#desiredNames()
+    // A snapshot, not the live set: the loop body releases registrations, and
+    // mutating a Set while iterating it skips whichever element follows.
+    const registered = Array.from(this.#state.registered)
+    for (const qualifiedName of registered) {
+      if (desired.has(qualifiedName)) continue
+      this.#release(qualifiedName)
+    }
+  }
+
+  /**
+   * Forget one native registration and unregister its tool.
+   *
+   * Best-effort on purpose: the registration is forgotten whether or not the
+   * disposer succeeds, because the host tears the scope down anyway and one
+   * unhappy disposer must not strand the tools queued behind it.
+   *
+   * @param qualifiedName - The native tool to release.
+   */
+  #release(qualifiedName: string): void {
+    const disposer = this.#disposers.get(qualifiedName)
+    this.#disposers.delete(qualifiedName)
+    this.#state.registered.delete(qualifiedName)
+    try {
+      disposer?.()
+    } catch {
+      // See above: nothing left to do about a disposer that throws.
+    }
   }
 
   /** Staged tools, keyed by qualified name, so activation needs no re-lookup. */
@@ -385,15 +425,13 @@ export class DirectToolRegistrar {
 
   /** Forget every native registration. */
   dispose(): void {
-    for (const disposer of this.#disposers.values()) {
-      try {
-        disposer()
-      } catch {
-        // Disposal is best-effort; the host tears the scope down anyway.
-      }
+    // `#disposers` and `#state.registered` are written together in
+    // `#registerOne` and cleared together in `#release`, so releasing every
+    // registered name empties both. The copy is what lets the loop mutate the
+    // set it is walking.
+    for (const qualifiedName of Array.from(this.#state.registered)) {
+      this.#release(qualifiedName)
     }
-    this.#disposers.clear()
-    this.#state.registered.clear()
     this.#state.staged.clear()
   }
 }

@@ -14,9 +14,10 @@
 
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { OutputGuard } from './output-guard.js'
+import { renderToolResult } from './projection.js'
 import { McpGatewayRegistry, summarizeParameters } from './registry.js'
 import { PROXY_TOOL_NAME, PROXY_TOOL_PARAMETERS } from './schema.js'
-import type { ProjectedBlock, ServerStatus, ToolCallResult } from './types.js'
+import type { ServerStatus } from './types.js'
 
 /** Arguments accepted by the proxy tool, as written by the model. */
 interface ProxyArgs {
@@ -62,60 +63,6 @@ const PROXY_TOOL_DESCRIPTION =
 function renderConnectFailure(serverName: string, error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
   return `Could not connect server "${serverName}": ${message}`
-}
-
-/**
- * Render one non-text block as a line of diagnostic text.
- *
- * @param block - The projected block.
- * @returns A single line describing it.
- */
-function renderBlock(block: ProjectedBlock): string {
-  switch (block.type) {
-    case 'text':
-      return block.text
-    case 'image':
-      return `[image: ${block.mimeType}, ${block.bytes} bytes — this gateway returns text only, so the pixels are not forwarded]`
-    case 'audio':
-      return `[audio: ${block.mimeType}, ${block.bytes} bytes — not forwarded]`
-    case 'resource_link':
-      return `[resource: ${block.name === undefined ? block.uri : `${block.name} <${block.uri}>`}]`
-    case 'unknown':
-      return `[${block.detail}]`
-  }
-}
-
-/**
- * Render one MCP tool result.
- *
- * A server-reported error is surfaced as an error, not a success: the call
- * happened, and pretending otherwise would teach the model the wrong lesson.
- *
- * @param toolName - The tool that was called, for the header.
- * @param result - The projected result.
- * @returns Text for the model.
- */
-function renderToolResult(toolName: string, result: unknown): string {
-  if (typeof result === 'string') return result
-  if (typeof result !== 'object' || result === null) return JSON.stringify(result, null, 2)
-
-  const projected = result as Partial<ToolCallResult>
-  const blocks = Array.isArray(projected.blocks) ? projected.blocks : undefined
-  if (blocks === undefined) {
-    // Not one of ours — hand back the JSON rather than inventing a shape.
-    return JSON.stringify(result, null, 2)
-  }
-
-  const body = blocks.map(renderBlock).filter(text => text !== '').join('\n')
-  const structured =
-    projected.structuredContent === undefined
-      ? ''
-      : `\n\n${JSON.stringify(projected.structuredContent, null, 2)}`
-
-  if (projected.isError === true) {
-    return `${toolName} reported an error:\n${body === '' ? '(no detail)' : body}`
-  }
-  return body === '' && structured === '' ? `${toolName} returned no content.` : `${body}${structured}`
 }
 
 /**
@@ -319,7 +266,218 @@ async function guardServerText(text: string, guard: OutputGuard | undefined): Pr
 }
 
 /**
- * Render the tool result as text, or as a structured error explanation.
+ * `{ search }`: answer from the local cache, then let promotion react to it.
+ *
+ * The search itself starts nothing — it ranks the documents already known — so
+ * the answer is free. The promotion hook runs afterwards, on the query alone:
+ * what it reports back is what the model is told became directly callable.
+ *
+ * @param args - The validated tool arguments.
+ * @param registry - The gateway registry.
+ * @param activateDirectTools - Optional promotion hook, invoked after a search.
+ * @returns Text for the model.
+ */
+function handleSearch(
+  args: ProxyArgs,
+  registry: McpGatewayRegistry,
+  activateDirectTools: SearchActivationHook | undefined,
+): string {
+  const options: { regex?: boolean; includeSchemas?: boolean; limit?: number; offset?: number } = {}
+  if (args.regex !== undefined) options.regex = args.regex
+  if (args.includeSchemas !== undefined) options.includeSchemas = args.includeSchemas
+  if (args.limit !== undefined) options.limit = args.limit
+  if (args.offset !== undefined) options.offset = args.offset
+  const rendered = renderSearch(registry.search(args.search ?? '', options))
+  const activated = activateDirectTools?.(
+    args.search ?? '',
+    args.regex === undefined ? {} : { regex: args.regex },
+  )
+  if (activated === undefined || activated.length === 0) return rendered
+  return (
+    `${rendered}\n\nNow callable directly as native tools: ${activated.join(', ')}. ` +
+    'Their schemas are in your tool list from here on.'
+  )
+}
+
+/**
+ * `{ describe }`: the full schema of one named tool.
+ *
+ * @param args - The validated tool arguments.
+ * @param registry - The gateway registry.
+ * @param outputGuard - Optional bound on server-authored payloads.
+ * @returns Text for the model.
+ */
+async function handleDescribe(
+  args: ProxyArgs,
+  registry: McpGatewayRegistry,
+  outputGuard: OutputGuard | undefined,
+): Promise<string> {
+  const resolution = registry.describe(args.describe ?? '', args.server)
+  if (resolution.kind === 'ok') {
+    return guardServerText(
+      renderDescribe(resolution.target.entry.serverName, resolution.target.tool),
+      outputGuard,
+    )
+  }
+  if (resolution.kind === 'ambiguous') {
+    return (
+      `"${args.describe}" exists on more than one server: ${resolution.candidates.join(', ')}. ` +
+      `Add server to choose one.`
+    )
+  }
+  if (resolution.kind === 'disabled') {
+    return `Server "${resolution.entry.serverName}" is disabled in configuration.`
+  }
+  const hint = nearMissHint(
+    resolution.suggestions,
+    'Search with mcp({ search: "<keyword>" }) to find the exact name.',
+  )
+  return `No known tool named "${args.describe}". ${hint}`
+}
+
+/**
+ * `{ instructions }`: a server's own usage notes, when it published any.
+ *
+ * @param args - The validated tool arguments.
+ * @param registry - The gateway registry.
+ * @param outputGuard - Optional bound on server-authored payloads.
+ * @returns Text for the model.
+ */
+async function handleInstructions(
+  args: ProxyArgs,
+  registry: McpGatewayRegistry,
+  outputGuard: OutputGuard | undefined,
+): Promise<string> {
+  const server = registry.servers.find(entry => entry.serverName === args.instructions)
+  if (server === undefined) return renderUnknownServer(args.instructions, registry)
+  const text = registry.instructions(args.instructions ?? '')
+  if (text === undefined) {
+    return `Server "${args.instructions}" published no usage instructions.`
+  }
+  return guardServerText(text, outputGuard)
+}
+
+/**
+ * `{ connect }`: start one server on purpose and refresh its metadata.
+ *
+ * @param args - The validated tool arguments.
+ * @param registry - The gateway registry.
+ * @param signal - Cancellation signal.
+ * @returns Text for the model.
+ */
+async function handleConnect(
+  args: ProxyArgs,
+  registry: McpGatewayRegistry,
+  signal: AbortSignal | undefined,
+): Promise<string> {
+  const server = registry.servers.find(entry => entry.serverName === args.connect)
+  if (server === undefined) return renderUnknownServer(args.connect, registry)
+  try {
+    // Explicit connect ignores the failure backoff: an operator who has just
+    // fixed the command should not have to wait out the window.
+    const catalog = await registry.ensureConnected(server, signal, { force: true })
+    return (
+      `Connected "${args.connect}" and refreshed its metadata: ${catalog.tools.length} ` +
+      `tool${catalog.tools.length === 1 ? '' : 's'}. It will stop again after it sits idle.`
+    )
+  } catch (error) {
+    return renderConnectFailure(args.connect ?? '', error)
+  }
+}
+
+/**
+ * `{ tool, args }`: resolve one tool, call it, render what came back.
+ *
+ * @param args - The validated tool arguments.
+ * @param registry - The gateway registry.
+ * @param signal - Cancellation signal.
+ * @param outputGuard - Optional bound on server-authored payloads.
+ * @returns Text for the model.
+ */
+async function handleCall(
+  args: ProxyArgs,
+  registry: McpGatewayRegistry,
+  signal: AbortSignal | undefined,
+  outputGuard: OutputGuard | undefined,
+): Promise<string> {
+  // A cold start knows nothing yet, so an unknown name is not a dead end: the
+  // registry connects servers that have no catalog and looks again.
+  const { resolution, failures } = await registry.discoverAndResolve(
+    args.tool ?? '',
+    args.server,
+    signal,
+  )
+  if (resolution.kind === 'ambiguous') {
+    return (
+      `"${args.tool}" exists on more than one server: ${resolution.candidates.join(', ')}. ` +
+      `Add server to choose one.`
+    )
+  }
+  if (resolution.kind === 'disabled') {
+    return `Server "${resolution.entry.serverName}" is disabled in configuration.`
+  }
+  if (resolution.kind === 'unknown') {
+    const hint = nearMissHint(
+      resolution.suggestions,
+      'Use mcp({ search: "<keyword>" }) to find the exact name.',
+    )
+    const failed =
+      failures.length === 0 ? '' : `\nServers that could not start: ${failures.join('; ')}`
+    return `No known MCP tool named "${args.tool}". ${hint}${failed}`
+  }
+  try {
+    const result = await registry.invoke(resolution.target, args.args ?? {}, signal)
+    return guardServerText(
+      renderToolResult(resolution.target.tool.qualifiedName, result),
+      outputGuard,
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return (
+      `Calling "${resolution.target.tool.qualifiedName}" on server ` +
+      `"${resolution.target.entry.serverName}" failed: ${message}`
+    )
+  }
+}
+
+/**
+ * The "no such server" line, shared by the two actions that name one.
+ *
+ * @param serverName - The name the model asked for.
+ * @param registry - The gateway registry.
+ * @returns Text listing the servers that do exist.
+ */
+function renderUnknownServer(
+  serverName: string | undefined,
+  registry: McpGatewayRegistry,
+): string {
+  const known = registry.servers.map(entry => entry.serverName).join(', ') || '(none)'
+  return `No server named "${serverName}". Configured: ${known}.`
+}
+
+/**
+ * The near-miss tail of a resolution failure.
+ *
+ * The fallback sentence is a parameter because `describe` and `tool` have always
+ * phrased it differently, and this refactor is not the place to change text the
+ * model reads.
+ *
+ * @param suggestions - Near-miss names from the resolution.
+ * @param whenNone - The sentence to use when there is no near miss.
+ * @returns A sentence to append to the failure line.
+ */
+function nearMissHint(suggestions: readonly string[], whenNone: string): string {
+  return suggestions.length === 0 ? whenNone : `Did you mean: ${suggestions.join(', ')}?`
+}
+
+/**
+ * Dispatch one proxy call to the handler for its action.
+ *
+ * The gateway is one tool with many actions, so this *is* the plugin's public
+ * behaviour: the order of these tests is the precedence between arguments, and a
+ * call carrying none of them falls through to status. Each action lives in its
+ * own function so one action's locals and early returns cannot be mistaken for
+ * another's.
  *
  * @param args - The validated tool arguments.
  * @param registry - The gateway registry.
@@ -337,111 +495,11 @@ async function executeProxy(
   outputGuard?: OutputGuard,
   nativeServers: NativeServersSource = [],
 ): Promise<string> {
-  if (args.search !== undefined) {
-    const options: { regex?: boolean; includeSchemas?: boolean; limit?: number; offset?: number } = {}
-    if (args.regex !== undefined) options.regex = args.regex
-    if (args.includeSchemas !== undefined) options.includeSchemas = args.includeSchemas
-    if (args.limit !== undefined) options.limit = args.limit
-    if (args.offset !== undefined) options.offset = args.offset
-    const rendered = renderSearch(registry.search(args.search, options))
-    const activated = activateDirectTools?.(args.search, args.regex === undefined ? {} : { regex: args.regex })
-    if (activated === undefined || activated.length === 0) return rendered
-    return (
-      `${rendered}\n\nNow callable directly as native tools: ${activated.join(', ')}. ` +
-      'Their schemas are in your tool list from here on.'
-    )
-  }
-
-  if (args.describe !== undefined) {
-    const resolution = registry.describe(args.describe, args.server)
-    if (resolution.kind === 'ok') {
-      return guardServerText(
-        renderDescribe(resolution.target.entry.serverName, resolution.target.tool),
-        outputGuard,
-      )
-    }
-    if (resolution.kind === 'ambiguous') {
-      return (
-        `"${args.describe}" exists on more than one server: ${resolution.candidates.join(', ')}. ` +
-        `Add server to choose one.`
-      )
-    }
-    if (resolution.kind === 'disabled') {
-      return `Server "${resolution.entry.serverName}" is disabled in configuration.`
-    }
-    const hint =
-      resolution.suggestions.length === 0
-        ? 'Search with mcp({ search: "<keyword>" }) to find the exact name.'
-        : `Did you mean: ${resolution.suggestions.join(', ')}?`
-    return `No known tool named "${args.describe}". ${hint}`
-  }
-
-  if (args.instructions !== undefined) {
-    const server = registry.servers.find(entry => entry.serverName === args.instructions)
-    if (server === undefined) {
-      return `No server named "${args.instructions}". Configured: ${registry.servers.map(entry => entry.serverName).join(', ') || '(none)'}.`
-    }
-    const text = registry.instructions(args.instructions)
-    if (text === undefined) {
-      return `Server "${args.instructions}" published no usage instructions.`
-    }
-    return guardServerText(text, outputGuard)
-  }
-
-  if (args.connect !== undefined) {
-    const server = registry.servers.find(entry => entry.serverName === args.connect)
-    if (server === undefined) {
-      return `No server named "${args.connect}". Configured: ${registry.servers.map(entry => entry.serverName).join(', ') || '(none)'}.`
-    }
-    try {
-      // Explicit connect ignores the failure backoff: an operator who has just
-      // fixed the command should not have to wait out the window.
-      const catalog = await registry.ensureConnected(server, signal, { force: true })
-      return (
-        `Connected "${args.connect}" and refreshed its metadata: ${catalog.tools.length} ` +
-        `tool${catalog.tools.length === 1 ? '' : 's'}. It will stop again after it sits idle.`
-      )
-    } catch (error) {
-      return renderConnectFailure(args.connect, error)
-    }
-  }
-
-  if (args.tool !== undefined) {
-    // A cold start knows nothing yet, so an unknown name is not a dead end: the
-    // registry connects servers that have no catalog and looks again.
-    const { resolution, failures } = await registry.discoverAndResolve(args.tool, args.server, signal)
-    if (resolution.kind === 'ambiguous') {
-      return (
-        `"${args.tool}" exists on more than one server: ${resolution.candidates.join(', ')}. ` +
-        `Add server to choose one.`
-      )
-    }
-    if (resolution.kind === 'disabled') {
-      return `Server "${resolution.entry.serverName}" is disabled in configuration.`
-    }
-    if (resolution.kind === 'unknown') {
-      const hint =
-        resolution.suggestions.length === 0
-          ? 'Use mcp({ search: "<keyword>" }) to find the exact name.'
-          : `Did you mean: ${resolution.suggestions.join(', ')}?`
-      const failed = failures.length === 0 ? '' : `\nServers that could not start: ${failures.join('; ')}`
-      return `No known MCP tool named "${args.tool}". ${hint}${failed}`
-    }
-    try {
-      const result = await registry.invoke(resolution.target, args.args ?? {}, signal)
-      return guardServerText(
-        renderToolResult(resolution.target.tool.qualifiedName, result),
-        outputGuard,
-      )
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      return (
-        `Calling "${resolution.target.tool.qualifiedName}" on server ` +
-        `"${resolution.target.entry.serverName}" failed: ${message}`
-      )
-    }
-  }
-
+  if (args.search !== undefined) return handleSearch(args, registry, activateDirectTools)
+  if (args.describe !== undefined) return handleDescribe(args, registry, outputGuard)
+  if (args.instructions !== undefined) return handleInstructions(args, registry, outputGuard)
+  if (args.connect !== undefined) return handleConnect(args, registry, signal)
+  if (args.tool !== undefined) return handleCall(args, registry, signal, outputGuard)
   return renderStatus(registry.status(), registry.cachePath, nativeServers)
 }
 
