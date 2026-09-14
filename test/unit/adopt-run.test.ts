@@ -447,7 +447,12 @@ describe('adopt.mjs — error paths (AD11, AD15)', () => {
     // whose whole job is reporting what it would change.
     const link = join(sandbox, 'dsh-mcp-lazy-adopt')
     symlinkSync(script, link)
-    const result = spawnSync(link, ['--help'], { encoding: 'utf8' })
+    // Run it *through* `node` rather than executing the link directly. Executing
+    // it makes the kernel read the shebang and resolve `/usr/bin/env`, which a
+    // container without an executable `/tmp` cannot do — the test then fails with
+    // "Cannot find module" for a reason that has nothing to do with the entry
+    // check it exists to cover.
+    const result = spawnSync(process.execPath, [link, '--help'], { encoding: 'utf8' })
     assert.equal(result.status, 0)
     assert.match(result.stdout, /Usage:/)
     assert.match(result.stdout, /--allow-skip/)
