@@ -2,14 +2,13 @@
 
 ## Agent 技能
 
-本仓库有项目级技能（DSH 的项目根 = 往上第一个含 `.git` 的目录，只扫 `<项目根>/.agents/skills`）。
-`.agents/skills/` 里的条目是**软链**，指向技能库 `~/.agents/skills-src/`（改库里的原件，所有挂载点同时生效）。
+技能全部住在 `~/.agents/skills/`，**全局会话自动可见，本仓库无需挂载**。
 
-已挂载：`code-review` `code-stats` `docker-image-optimize` `frontend-design` `repo-workflow` `resolving-merge-conflicts` `secrets-scanner` `setup-pre-commit` `tdd` `webapp-testing`
+> 2026-09 变更：原先这里用软链指向技能库 `~/.agents/skills-src/`，由 `skill-link` 管理、逐个挂载。
+> 该目录与那个工具都已移除，技能已合并进全局的 `~/.agents/skills/`；本仓库不再需要 `.agents/skills/`。
 
-- 看/改挂载：`python3 ~/.agents/skills-src/skill-link linked` / `add <名字>` / `rm <名字>`
-- 库里没有想要的技能：先找找 `python3 ~/.agents/skills-src/skill-link list`
-- **技能的正确落点**：只本仓库用 → 挂这里；多个仓库都用 → 每个仓库各挂一次；不进仓库也要自动触发 → 才放全局 `~/.agents/skills/`。
-- 新增技能先写在 `~/.agents/skills-src/_promote/`，写通了再用 `skill-link add` 决定归哪个仓库。
+本仓库常用的：`code-review` `code-stats` `docker-image-optimize` `frontend-design` `repo-workflow` `resolving-merge-conflicts` `secrets-scanner` `setup-pre-commit` `tdd` `webapp-testing`
 
-> 这些软链要跟着提交进 git：`git add .agents/skills && git commit -m "chore: 挂载技能"`
+- 新增/修改技能：直接动 `~/.agents/skills/<名字>/`（目录名 = 技能名，写进去即生效，无需挂载）
+- **只本仓库专用**的技能才放 `.agents/skills/<名字>/SKILL.md`（DSH 原生扫 `<项目根>/.agents/skills`，前提是仓库已 `git init`）
+- 维护规则见 `~/.agents/skills/AGENTS.md`

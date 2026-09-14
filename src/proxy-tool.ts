@@ -458,6 +458,39 @@ export type SearchActivationHook = (
 ) => string[]
 
 /**
+ * Unwrap the argument envelope a gateway-named tool is dispatched with.
+ *
+ * A host that reserves a tool name for "call any tool" — `mcp` here, because
+ * this gateway's whole purpose is to front every MCP server under that one name
+ * — delivers arguments as `{ tool: "<the tool being called>", args: <its
+ * arguments> }` rather than passing them straight through. Every other tool on
+ * the host is affected the same way, and the host unwraps for its own tools.
+ *
+ * This plugin's tool is called `mcp`, so it collides with that reserved name and
+ * receives the envelope. Left wrapped, `{ search: "x" }` arrives as
+ * `{ tool: "mcp", args: { search: "x" } }`, the gateway reads `tool` as *a tool
+ * to call on some MCP server*, and every call answers
+ * `No known MCP tool named "mcp"` — the plugin looks installed and working while
+ * being unable to do anything at all.
+ *
+ * The signature is unambiguous: the envelope's `tool` is this gateway's own name.
+ * A caller meaning something else by `tool` is asking an MCP server for a tool
+ * literally named `mcp`, which cannot exist — this gateway is the only `mcp`.
+ *
+ * @param args - The arguments as dispatched.
+ * @returns The arguments the gateway should act on.
+ */
+export function unwrapGatewayEnvelope(
+  args: ProxyArgs | Record<string, unknown>,
+): ProxyArgs | Record<string, unknown> {
+  const candidate = args as { tool?: unknown; args?: unknown }
+  if (candidate.tool !== PROXY_TOOL_NAME) return args
+  const inner = candidate.args
+  if (typeof inner !== 'object' || inner === null || Array.isArray(inner)) return args
+  return inner as Record<string, unknown>
+}
+
+/**
  * Build the proxy tool definition.
  *
  * @param registry - The gateway registry the tool delegates to.
@@ -482,9 +515,9 @@ export function createProxyTool(
       schema: { type: 'string' },
       render: (_args, value) => [{ type: 'text', text: String(value) }],
     },
-    async execute(args, exec) {
+    async execute(dispatched, exec) {
       return executeProxy(
-        args as ProxyArgs,
+        unwrapGatewayEnvelope(dispatched) as ProxyArgs,
         registry,
         exec.signal,
         activateDirectTools,

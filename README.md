@@ -153,7 +153,7 @@ The v1 boundary, stated plainly:
 
 ```bash
 pnpm install
-pnpm test          # builds, relinks the peer packages, runs 271 tests
+pnpm test          # builds, relinks the peer packages, runs 277 tests
 pnpm run check     # typecheck (sources and tests) then build
 ```
 

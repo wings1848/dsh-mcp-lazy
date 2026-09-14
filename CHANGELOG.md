@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-09-14
+
+### Fixed
+
+- **The `mcp` tool did nothing at all.** A host that reserves `mcp` for "call any
+  tool" dispatches arguments to that name as
+  `{ tool: "<the tool being called>", args: <its arguments> }` rather than passing
+  them through. This plugin's tool is called `mcp`, so it collides with the
+  reserved name and received the envelope: `{ search: "x" }` arrived as
+  `{ tool: "mcp", args: { search: "x" } }`, the gateway read `tool` as *a tool to
+  call on some MCP server*, and every call answered `No known MCP tool named
+  "mcp"`. The plugin loaded, listed its tool, and could not search, describe,
+  connect or call anything — which is every reason it exists. The envelope is now
+  unwrapped before dispatch. Reported by the maintainer, who noticed the tool
+  answering nonsense immediately after installing 0.2.0.
+
 ## [0.2.0] - 2026-09-14
 
 ### Added
@@ -330,7 +346,8 @@ fail first — and fixed before this release:
   heavily cannot flood the model's context through an error message
   (`src/connection.ts`).
 
-[Unreleased]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/wings1848/dsh-mcp-lazy/releases/tag/v0.1.0

@@ -476,3 +476,75 @@ describe('AC18 — the spawn trap is real', () => {
     assert.throws(() => execFileSync('demo-server', { stdio: 'pipe' }))
   })
 })
+
+describe('the gateway argument envelope', () => {
+  /**
+   * A gateway with nothing cached: every call answers from local state, so these
+   * assertions are about argument handling and never touch a server.
+   *
+   * @returns A tool whose results can be called and read as text.
+   */
+  function tool(): {
+    call: (args: Record<string, unknown>) => Promise<string>
+  } {
+    const registry = new McpGatewayRegistry({ idleTimeout: 10, servers: [] })
+    const definition = createProxyTool(registry)
+    return {
+      call: async args =>
+        String(
+          await definition.execute(args, { signal: new AbortController().signal } as Parameters<
+            typeof definition.execute
+          >[1]),
+        ),
+    }
+  }
+
+  it('accepts flat arguments, the way a direct caller passes them', async () => {
+    const text = await tool().call({ search: 'anything' })
+    assert.match(text, /nothing to search/)
+    assert.doesNotMatch(text, /No known MCP tool/)
+  })
+
+  it('unwraps the envelope a gateway-named tool is dispatched with', async () => {
+    // The host reserves `mcp` for "call any tool" and delivers arguments as
+    // `{ tool: "<the tool being called>", args: <its arguments> }`. This plugin's
+    // tool *is* named `mcp`, so it collides with that reserved name and gets the
+    // envelope. Left wrapped, the gateway reads `tool: "mcp"` as a tool to call
+    // on some server and answers `No known MCP tool named "mcp"` to every single
+    // call — installed, listed, and completely unable to do anything.
+    const text = await tool().call({ tool: PROXY_TOOL_NAME, args: { search: 'anything' } })
+    assert.match(text, /nothing to search/)
+    assert.doesNotMatch(text, /No known MCP tool/)
+  })
+
+  it('unwraps an empty envelope into the status listing', async () => {
+    const text = await tool().call({ tool: PROXY_TOOL_NAME, args: {} })
+    assert.match(text, /No MCP servers are configured/)
+  })
+
+  it('leaves a real tool call alone', async () => {
+    // `tool: "some_tool"` is a caller asking an MCP server for that tool. Only
+    // this gateway's own name marks the envelope, and a server cannot offer a
+    // tool called `mcp` — this gateway is the only one.
+    const text = await tool().call({ tool: 'some_tool', args: { a: 1 } })
+    assert.match(text, /No known MCP tool named "some_tool"/)
+  })
+
+  it('leaves a malformed envelope to the schema rather than guessing', async () => {
+    // `args` that is not an object is not the shape the host sends. The tool's
+    // own schema already rejects it — `args` is declared as an object — so the
+    // unwrapper only has to decline, and the caller gets a named violation
+    // instead of a silently different call.
+    await assert.rejects(
+      tool().call({ tool: PROXY_TOOL_NAME, args: 'not-an-object' }),
+      /"args" must be an object/,
+    )
+  })
+
+  it('does not mutate the caller’s argument object', async () => {
+    const args: Record<string, unknown> = { tool: PROXY_TOOL_NAME, args: { search: 'x' } }
+    const before = JSON.stringify(args)
+    await tool().call(args)
+    assert.equal(JSON.stringify(args), before)
+  })
+})
