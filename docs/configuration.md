@@ -190,7 +190,12 @@ a native tool is genuinely worth moving the prefix, not as a default worth reach
 **The consequence:** a promoted tool is a real tool in the request, so the tool-definition
 prefix changes and the prompt cache is invalidated from the first changed token
 (`src/schema.ts`, `src/index.ts`). `'search'` defers that change until the model goes looking
-for a tool; `freezeDirectTools: true` bounds the churn to one event (`src/direct-tools.ts`).
+for a tool. `freezeDirectTools: true` stops **new** names from being promoted after the first
+sync, which bounds the growth to one event — it does not pin the surface against a
+withdrawal. A tool the refreshed catalog no longer offers is removed from the native surface
+either way, because a native tool still routing to a name the server has dropped fails on
+every call, and a stable-but-broken registration is worse than one that disappears
+(`src/direct-tools.ts`).
 
 **Timing.** Promotion is evaluated at activation, after a live catalog refresh (a server's
 `notifications/tools/list_changed`), and for `'search'` servers after each `mcp({ search })`

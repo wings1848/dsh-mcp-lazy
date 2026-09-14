@@ -129,7 +129,7 @@ pi 的脚本模式（`scriptMode`）、审批门（`approveTools`）。
 | `disabled` | 同名 | `false` | 仅字面 `true` 生效 |
 | `toolPrefix` | 简化为 `serverName` 前缀规则 | — | pi 有 4 种前缀模式，v1 只保留一种确定命名 |
 | `settings.idleTimeout` | 全局 `idleTimeout` | `10` | 插件级 config |
-| `settings.freezeDirectTools` | 同名 | `false` | 冻结 direct 注册以保前缀 |
+| `settings.freezeDirectTools` | 同名 | `false` | 冻结 direct **新增**以保前缀（撤销不受影响） |
 | `settings.directTools` | 同名 | 缺省 | 全局缺省，被每服务器覆盖 |
 
 ---
@@ -271,14 +271,15 @@ node scripts/measure-surface.mjs 3
 ### 功能
 - **AC1（A）** 冷启动零连接：配置 3 台服务器后启动 DSH，`ps` 中不出现任何 MCP 子进程，且日志无 `mcp__*` 工具注册。
 - **AC2（A）** 工具面恒定（默认路径）：任何时刻（未连接/已连接/已回收/服务器增删工具后）`ctx.tools.schemas()` 中本插件贡献的工具**恒为 1 个**，名字与 JSON schema 逐字节相同。
-- **AC2b（A）** direct 语义（仅当配置 `directTools`）：`true`/`string[]` 按选择注册真原生工具；`"search"` **只暂存（staged），不注册**，被 `mcp({ search })` 命中后才注册、并可直接调用；`freezeDirectTools: true` 时初始同步后的元数据更新**不改变**工具面。
+- **AC2b（A）** direct 语义（仅当配置 `directTools`）：`true`/`string[]` 按选择注册真原生工具；`"search"` **只暂存（staged），不注册**，被 `mcp({ search })` 命中后才注册、并可直接调用。
+  `freezeDirectTools: true` 时初始同步后的元数据更新**不扩大**工具面——它约束的只是**新增**，**不阻止撤销**：刷新后的 catalog 不再提供的工具照样从原生面收回（留着它只会拿服务器已删掉的名字去调用、每次都报错，比消失更伤模型），且被收回的名字之后即使回来也仍被拒绝，因为 freeze 管的是「增加」（`src/direct-tools.ts`）。
 - **AC3（A）** 离线搜索：在**没有任何服务器进程**的情况下 `mcp({ search: "screenshot" })` 返回命中（来自磁盘缓存），且不产生 spawn。
 - **AC4（A）** 懒启动：首次 `mcp({ tool, args })` 才 spawn；第二次命中复用同一连接（断言 pid 不变）。
 - **AC5（A）** 元数据刷新：服务器变更工具列表（`notifications/tools/list_changed` 或重启后 `connect`）→ 缓存更新，`search` 结果随之变化。
 - **AC6（A）** 空闲回收：把 `idleTimeout` 设为最小值，闲置到期后子进程退出、连接释放；再次调用能重新连上并成功。
 - **AC7（A）** 在途保护：长调用期间即使超过 `idleTimeout` 也不回收（`inFlight>0`），调用正常完成。
 - **AC8（A）** 错误面：未知名 / 歧义名（两台服务器同名工具）/ 服务器崩溃 → 三类确定性诊断文案，绝不返回伪造成功。
-- **AC9（A）** 结果投影：文本按块序返回；图片**未实现，也不再计划实现**——投影层只输出一行诊断文本（类型 + 字节数），不转发像素（`src/proxy-tool.ts` 的 image 分支；口径以 `README.md`「Known Limitations」为准）。
+- **AC9（A）** 结果投影：文本按块序返回；图片**未实现，也不再计划实现**——投影层只输出一行诊断文本（类型 + 字节数），不转发像素（`src/projection.ts` 的 image 分支；口径以 `README.md`「Known Limitations」为准）。
 - **AC10（A）** 分页：`search` 的 `limit`/`offset` 生效，默认 12、上限 40；超限被裁剪而非报错。
 
 ### 成本（本插件的存在理由）
@@ -315,10 +316,10 @@ node scripts/measure-surface.mjs 3
 
 | 风险 | 影响 | 缓解 |
 |---|---|---|
-| 动态工具注册 vs KV cache | 省钱反被 cache 击穿 | 默认恒定单工具（AC2 守住）；directTools 为显式可选 + `freezeDirectTools` 兜底 |
+| 动态工具注册 vs KV cache | 省钱反被 cache 击穿 | 默认恒定单工具（AC2 守住）；directTools 为显式可选 + `freezeDirectTools` 约束增长（撤销仍会改变工具面） |
 | fork 上游漂移 | 官方修 bug 拿不到 | 只改「注册什么」，连接/传输层保持与上游 1:1，便于 rebase；记录 upstream 版本 |
 | 缓存陈旧导致模型按旧 schema 调用 | 调用失败 | 缓存带 `configHash` + TTL；`mcp({ tool })` 前对未知工具做一次实时校验；失败信息给出刷新动作 |
 | 代理工具 schema 过大 | 恒定成本上升 | `mcp` 工具参数保持扁平（tool/args/server/search/describe/limit/offset），实测目标 ≤ 400 token |
 | 空闲回收误杀长任务 | 数据/进度丢失 | `inFlight` 计数（AC7）+ 关闭前 quiesce |
 | 与官方 MCP 插件并存时的命名 | 工具名冲突 | 各自 `serverName` 命名空间；重复即报错（AC17） |
-| `"search"` 模式激活导致前缀变化 | 命中那一刻 cache 失效 | 激活只发生一次且由模型搜索触发；文档写明；`freezeDirectTools` 可彻底冻结 |
+| `"search"` 模式激活导致前缀变化 | 命中那一刻 cache 失效 | 激活只发生一次且由模型搜索触发；文档写明；`freezeDirectTools` 冻结**新增**（服务器的撤销不受它影响） |
