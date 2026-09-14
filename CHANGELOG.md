@@ -21,7 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `mcp-lazy/adopt` is now an export path, so the planning function can be reused: `planAdoption`
   is pure, takes the composed rows and the existing config, and returns a plan whose `edits`
   array is a byte-exact edit script.
-- The docs now say how many tests there are without being wrong: 263 in 64 suites.
+- The test counts quoted in `README.md`, `README-zh.md` and `CONTRIBUTING.md` now match the
+  suite instead of trailing it.
 
 ### Fixed
 

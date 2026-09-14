@@ -6,7 +6,7 @@
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "bin": {
-    "dsh-mcp-lazy-adopt": "./scripts/adopt.mjs"
+    "dsh-mcp-lazy-adopt": "scripts/adopt.mjs"
   },
   "exports": {
     ".": {
