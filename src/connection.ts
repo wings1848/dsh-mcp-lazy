@@ -18,6 +18,8 @@
  * @module dsh-mcp-lazy/connection
  */
 
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { ToolListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
@@ -32,11 +34,40 @@ import type { ProjectedBlock, ServerEntry, ToolCallResult, ToolMetadata } from '
 /** How often idle connections are checked, in milliseconds. */
 export const IDLE_SWEEP_INTERVAL_MS = 30_000
 
-/** First reconnect delay after a dropped connection, in milliseconds. */
-export const RECONNECT_INITIAL_DELAY_MS = 500
+/** Reported when the package manifest cannot be read at all. */
+const UNKNOWN_CLIENT_VERSION = '0.0.0-unknown'
 
-/** Reconnect delay ceiling, in milliseconds. */
-export const RECONNECT_MAX_DELAY_MS = 30_000
+/**
+ * The package manifest, resolved at load time.
+ *
+ * This module is emitted into `lib/`, which sits directly under the package
+ * root, so one `..` from the built file is the manifest. A source-level import
+ * is not an option: `erasableSyntaxOnly` rules out an import assertion, and a
+ * JSON import would need a loader Node does not enable for a published package.
+ */
+function readPackageVersion(): string {
+  try {
+    const manifest = fileURLToPath(new URL('../package.json', import.meta.url))
+    const parsed: unknown = JSON.parse(readFileSync(manifest, 'utf8'))
+    const version = (parsed as { version?: unknown } | null)?.version
+    return typeof version === 'string' && version !== '' ? version : UNKNOWN_CLIENT_VERSION
+  } catch {
+    // Reporting which client is calling is a diagnostic, not a capability. A
+    // missing or unreadable manifest must not be what stops a server from
+    // starting — so the fallback is a wrong version, never a broken connect.
+    return UNKNOWN_CLIENT_VERSION
+  }
+}
+
+/**
+ * The version this plugin advertises to every MCP server it spawns.
+ *
+ * Read from `package.json` rather than written here. The literal it replaced
+ * had already fallen two releases behind, and every server the gateway spoke
+ * to was told the wrong version — a number nothing in the suite could notice,
+ * because there was nothing to compare it against.
+ */
+export const CLIENT_VERSION = readPackageVersion()
 
 /**
  * Permissive result schema.
@@ -293,6 +324,20 @@ export class LazyConnections implements GatewayConnection {
   }
 
   /**
+   * Record the last failure seen for one server.
+   *
+   * One place, so the reason a server is reported broken reads the same whether
+   * it arrived through a connect attempt, a rejected refresh, or a listener that
+   * threw.
+   *
+   * @param serverName - The server the failure belongs to.
+   * @param error - The failure, in whatever form it arrived.
+   */
+  #recordError(serverName: string, error: unknown): void {
+    this.#errors.set(serverName, error instanceof Error ? error.message : String(error))
+  }
+
+  /**
    * Resolve the idle window for one server, caching the answer.
    *
    * @param entry - The server entry.
@@ -314,7 +359,10 @@ export class LazyConnections implements GatewayConnection {
    * @returns The live client.
    */
   async #open(entry: ServerEntry): Promise<Client> {
-    const client = new Client({ name: 'dsh-mcp-lazy', version: '0.1.0' }, { capabilities: {} })
+    const client = new Client(
+      { name: 'dsh-mcp-lazy', version: CLIENT_VERSION },
+      { capabilities: {} },
+    )
     client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
       const state = this.#states.get(entry.serverName)
       // A notification from a generation that has already been replaced is
@@ -325,10 +373,24 @@ export class LazyConnections implements GatewayConnection {
         if (state.client !== client) return
         state.catalog = catalog
         state.lastUsedAt = this.#now()
-        this.#onCatalogChanged?.(entry.serverName, catalog)
-      } catch {
+      } catch (error) {
         // A failed refresh keeps the previous catalog: a stale list is better
         // than an empty one, and the next call will retry the fetch anyway.
+        //
+        // Recorded rather than dropped because this is the only place the
+        // failure can be seen at all. A notification handler has no caller to
+        // throw to, and an unhandled rejection here would take the process down.
+        this.#recordError(entry.serverName, error)
+        return
+      }
+      // Deliberately outside the guard above. The refresh failing and the
+      // listener failing are different events: the first is expected and
+      // silent, the second means native promotion did not happen — and folding
+      // them together made the second indistinguishable from the first.
+      try {
+        this.#onCatalogChanged?.(entry.serverName, state.catalog)
+      } catch (error) {
+        this.#recordError(entry.serverName, error)
       }
     })
     const { transport, stderr } = this.#createTransport(entry)
@@ -487,8 +549,7 @@ export class LazyConnections implements GatewayConnection {
         // ordinary way to land here, and the SDK does not clean it up: as far as
         // it is concerned the connection succeeded.
         if (client !== undefined && !handedOff) await client.close().catch(() => undefined)
-        const message = error instanceof Error ? error.message : String(error)
-        this.#errors.set(entry.serverName, message)
+        this.#recordError(entry.serverName, error)
         throw error
       } finally {
         this.#connecting.delete(entry.serverName)
@@ -499,20 +560,43 @@ export class LazyConnections implements GatewayConnection {
     if (signal !== undefined) {
       // The attempt is shared, so caller cancellation must not cancel it for
       // everyone else; it only stops this caller from waiting.
-      return await Promise.race([
-        attempt,
-        new Promise<never>((_resolve, reject) => {
-          if (signal.aborted) {
-            reject(new Error('the tool call was canceled before the server connected'))
-            return
-          }
-          signal.addEventListener(
-            'abort',
-            () => reject(new Error('the tool call was canceled before the server connected')),
-            { once: true },
-          )
-        }),
-      ])
+      //
+      // There is deliberately no shortcut for a signal that is already aborted.
+      // Throwing before the cleanup below was attached left attempts that were
+      // already running unobserved, and their rejection surfaced as an unhandled
+      // rejection. The listener costs nothing here either way: the executor runs
+      // synchronously, so it is registered and removed again within one tick.
+      let onAbort: () => void = () => undefined
+      const cancellation = new Promise<never>((_resolve, reject) => {
+        onAbort = (): void => {
+          reject(new Error('the tool call was canceled before the server connected'))
+        }
+        if (signal.aborted) {
+          onAbort()
+          return
+        }
+        signal.addEventListener('abort', onAbort, { once: true })
+      })
+      // `{ once: true }` only removes a listener when it actually fires, and the
+      // ordinary outcome is the attempt settling first — which left one closure
+      // and one unsettled promise pinned to the signal per attempt, forever.
+      // Node does not warn either: `AbortSignal` is an `EventTarget`, and the
+      // MaxListeners ceiling is only enforced for `EventEmitter`.
+      const cleanup = attempt.then(
+        catalog => {
+          signal.removeEventListener('abort', onAbort)
+          return catalog
+        },
+        (error: unknown) => {
+          signal.removeEventListener('abort', onAbort)
+          throw error
+        },
+      )
+      // `cleanup`, not `attempt`. It settles identically and rejects with the
+      // same object, but its rejection is observed by the handler above — so an
+      // attempt nobody is waiting on any more cannot become an unhandled
+      // rejection.
+      return await Promise.race([cleanup, cancellation])
     }
     return await attempt
   }
