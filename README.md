@@ -195,8 +195,8 @@ The v1 boundary, stated plainly:
 
 ```bash
 pnpm install
-pnpm test          # builds, relinks the peer packages, runs 305 tests
-pnpm run check     # typecheck (sources and tests) then build
+pnpm test          # builds, relinks the peer packages, runs 342 tests
+pnpm run check     # typecheck, lint, build, then type-check the test sources
 ```
 
 See [CONTRIBUTING.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/CONTRIBUTING.md).

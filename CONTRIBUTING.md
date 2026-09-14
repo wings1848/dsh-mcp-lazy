@@ -59,7 +59,7 @@ All of these come from `package.json` `scripts`.
 | --- | --- |
 | `pnpm build` | `tsc -p tsconfig.json` — compiles `src/` to `lib/` with declarations and source maps. |
 | `pnpm typecheck` | The same project with `--noEmit` — type errors only, no output. |
-| `pnpm test` | `node --test "test/unit/*.test.ts"`. Runs `pretest` first (build, then `link-dsh`). 305 tests in 73 suites (`README.md`, `docs/design/parity-pi-mcp-adapter.md`). |
+| `pnpm test` | `node --test "test/unit/*.test.ts"`. Runs `pretest` first (build, then `link-dsh`). 342 tests in 84 suites (`README.md`, `docs/design/parity-pi-mcp-adapter.md`). |
 | `pnpm test:types` | `tsc -p tsconfig.test.json` — type-checks the test sources as well, which `typecheck` does not cover. |
 | `pnpm check` | `typecheck` then `lint` then `build` then `test:types`, in that order. Run this before opening a pull request; CI runs the same command. |
 | `pnpm lint` | `oxlint src scripts test` (config: `.oxlintrc.json`), then `node scripts/check-style.mjs` for the rules in `.editorconfig` that oxlint does not implement — the 100-column limit, LF endings, trailing whitespace, final newline. |

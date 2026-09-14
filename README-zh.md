@@ -172,8 +172,8 @@ mcp({})                                # 状态：工具数 / 连接态 / 缓存
 
 ```bash
 pnpm install
-pnpm test          # 构建 → 重链 peer 包 → 305 个用例
-pnpm run check     # typecheck（含测试）→ build
+pnpm test          # 构建 → 重链 peer 包 → 342 个用例
+pnpm run check     # typecheck → lint → build → 再对测试源码做类型检查
 ```
 
 见 [CONTRIBUTING.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/CONTRIBUTING.md)。
