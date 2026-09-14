@@ -1,6 +1,6 @@
 {
   "name": "dsh-mcp-lazy",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Lazy MCP gateway for DeepSeek Harness: one stable proxy tool instead of N tool schemas, servers connect on first use and idle out, metadata cached to disk.",
   "type": "module",
   "main": "lib/index.js",
@@ -75,7 +75,8 @@
     "zod": "^4.0.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0"
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "js-yaml": "4.3.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
@@ -84,7 +85,6 @@
     "@deepseek-ai/schemastery": "^3.18.2",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.0.0",
-    "js-yaml": "4.3.2",
     "typescript": "^5.9.0",
     "zod": "^4.0.0"
   },
