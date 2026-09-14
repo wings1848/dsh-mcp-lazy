@@ -51,23 +51,44 @@ jobs:
       # requires a trusted publisher to be configured for this package on
       # npmjs.com (repository wings1848/dsh-mcp-lazy, workflow release.yml).
       # See CONTRIBUTING.md.
-      # Skips a version that is already on the registry rather than failing on
-      # it. The first release has to be published by hand -- a trusted publisher
-      # can only be configured for a package that already exists -- so the tag
-      # that accompanies it would otherwise produce a red run whose only message
-      # is "cannot publish over the previously published versions".
+      # A version already on the registry is a success, not a failure. The first
+      # release has to be published by hand -- a trusted publisher can only be
+      # configured for a package that already exists -- so the tag that
+      # accompanies it would otherwise produce a red run whose only message is
+      # "cannot publish over the previously published versions".
+      #
+      # The test is "attempt the publish and read the rejection", not "ask npm
+      # first". npm's read endpoints are served from a cache that lags minutes
+      # behind a publish, so a `npm view` guard answers "not published" for a
+      # version that is published, and the publish that follows is refused with
+      # a 403 that reads like an authentication problem. That is precisely the
+      # shape a re-run after a partial failure would take.
       - name: publish, unless this version is already on npm
         env:
           NPM_CONFIG_PROVENANCE: 'true'
         run: |
-          set -euo pipefail
+          set -uo pipefail
           pkg=$(node -p "require('./package.json').name")
           version=$(node -p "require('./package.json').version")
-          if npm view "${pkg}@${version}" version >/dev/null 2>&1; then
-            echo "::notice::${pkg}@${version} is already on npm; skipping the publish step."
+
+          set +e
+          output=$(npm publish --provenance --access public 2>&1)
+          code=$?
+          set -e
+
+          if [ "$code" -eq 0 ]; then
+            printf '%s\n' "$output"
+            echo "::notice::published ${pkg}@${version}"
             exit 0
           fi
-          npm publish --provenance --access public
+          printf '%s\n' "$output"
+
+          if printf '%s' "$output" | grep -q 'previously published versions'; then
+            echo "::notice::${pkg}@${version} is already on npm; nothing to do."
+            exit 0
+          fi
+          echo "::error::publish failed with exit ${code}"
+          exit "$code"
 
       - name: create the GitHub release
         env:
