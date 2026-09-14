@@ -39,6 +39,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `inject` contract in the plugin-load tests is now modelled rather than assumed: the fakes
   gained the `inject` seam, and the suite asserts the gateway registers its tool with no command
   registry present.
+- **A malformed metadata cache no longer stops the plugin from loading.** The cache was checked
+  only as far as "it is an object with a version and a `servers` key"; an entry that was `null`,
+  or one missing its `tools` array, threw a `TypeError` out of the registry constructor and took
+  the whole gateway down with it — every server, including the healthy ones. Entries are now
+  validated one at a time and an unusable one is dropped, which is what the module always claimed
+  it did.
+- **Cancelling a call is no longer recorded as a server failure.** A caller who walked away — a
+  cancelled request, an aborted signal — was written into the same failure map a genuine startup
+  error goes to, which opened the 60-second retry window against a server that had done nothing
+  wrong: the next caller, who cancelled nothing, was refused with a message about a failure that
+  never happened. A cancellation now leaves no trace; a real failure still backs off.
+- **The on-disk cache is additive across processes instead of last-writer-wins.** Every DSH
+  process pointed at one `$DSH_HOME` shares the file, and each wrote back the snapshot it had read
+  at startup, so a GUI and a CLI deleted each other's catalogs and search kept falling back to a
+  cold start. The file is re-read and merged before each write. Entries this process cannot judge
+  are kept rather than filtered against its own configuration — profiles share one cache file and
+  do not share a server list, so a server this process does not know is far more likely to belong
+  to another profile than to have been deleted.
+- **The version this plugin reports to every MCP server came from a literal**, and had already
+  fallen two releases behind: servers were told `0.1.0` while the package was `0.3.0`. It is read
+  from `package.json` now, and a test compares the two so the next drift fails.
+- **A long-lived abort signal accumulated one listener per connect attempt.** The listener was
+  registered `once` and never removed when the attempt it belonged to settled first, so a reused
+  signal grew a listener — and a captured promise — per call, silently, because Node does not warn
+  at these counts.
+- **A failure inside a catalog-changed listener was recorded where nothing read it.** The empty
+  catch that used to swallow it was replaced, but the map the replacement wrote to had no
+  consumer outside its own test, so the failure was still invisible to `status`. The registry now
+  falls back to the connection layer's errors, and a server that is up but whose refresh threw
+  reports the reason without being downgraded to failed.
+- **A promoted native tool stayed callable after its server withdrew it.** Promotion only ever
+  added: a tool the refreshed catalog no longer offered kept its native registration and went on
+  dispatching to a name the server had dropped, failing on every call. Promotion is now
+  revocable. `freezeDirectTools` stops the surface from *growing*; it does not pin a withdrawn
+  tool in place, because a stable-but-broken registration is worse for the model than one that
+  disappears — the proxy still reaches it either way.
+- **The two result renderers had drifted.** The proxy path and the promoted-native path each had
+  their own copy, and the native copy dropped `structuredContent` entirely: a server returning
+  only structured content showed *"returned no content"* once promoted and the JSON when it was
+  not. One renderer in `src/projection.ts` now serves both.
+- **`dsh-mcp-lazy-adopt` could not write on Windows.** The staged temp file name was built by
+  splitting on `/`, which returns the whole path on a system that separates with `\` — putting
+  `C:\…` into a file name, where the colon is illegal. Every run there failed with "cannot
+  write". It asks `node:path` now, which also makes the Windows contract testable from a POSIX
+  host — the reason the bug reached a release at all.
+- The cache directory and file are created `0700` and `0600`; the file previously took the
+  ambient umask.
+
+### Changed
+
+- **Lint is now a gate.** `oxlint` plus a zero-dependency column checker run inside `check` and
+  therefore inside CI. The checker enforces the `.editorconfig` limit oxlint does not implement
+  (it has `max-lines`, not `max-len`), and its baseline is a per-file count that fails when it
+  grows rather than a list of exempt files.
+- `failureBackoffMs` is a supported setting: milliseconds, minimum `0`, default `60000`, and `0`
+  retries immediately. It had been reachable and effective all along while the documentation and
+  the type both said no user-facing spelling existed.
+- `idleWindowMs` accepts only a function. A scalar used to pass validation and then be discarded,
+  which is the failure mode this plugin exists to prevent: a setting that looks configured.
+- The `RECONNECT_*` constants are gone. Nothing referenced them, and the plugin has no reconnect
+  timer — a dropped server is restarted by the next call that needs it.
+- `executeProxy` is a dispatcher over per-action handlers, and both result paths share one
+  renderer. The model-facing surface is byte-identical: `11` parameters, `1525` bytes.
+- The README documents the four search parameters (`regex`, `includeSchemas`, `limit`, `offset`),
+  which had no user-facing description at all, and names `directTools`, which the landing page
+  never mentioned.
 
 ## [0.2.1] - 2026-09-14
 
