@@ -1,7 +1,7 @@
 # dsh-mcp-lazy — 接管命令（adopt）方案与验收标准
 
-**状态**：方案，**未实施**。本文件只定义要做什么、如何判定做完，不含实现代码。
-**本仓库版本**：`0.1.1`（`package.json`）。
+**状态**：**已实施**（M0–M6 全部完成）。§8 的三条待验证已补齐（见 §8.1–§8.3）；实现与本文的差异见 §11。
+**本仓库版本**：`0.1.1`（`package.json`），实施后未升版。
 **范围**：B 路线 —— 显式接管命令。A 路线（劫持 `@deepseek-ai/dsh-mcp-client` 包名）不在本次范围，理由见 §7。
 **取证对象与版本**（第三方包升级后需重新核对本文全部行号）：
 
@@ -147,9 +147,14 @@
 | `skip`（`already-lazy`） | 只表示**不再新增** `servers` 条目 |
 | `overrides`（就地禁用） | 只要存在 native 行**且**其 serverName 已被本插件接管，就要禁用该行 |
 
-### D8 — 明确不做的迁移对象
+### D8 — 明确不做的迁移对象（**实施后修正**）
 
-`@hyzyn/dsh-codegraph` 的托管行会被插件自身重写（F2）。接管它需要同时把该插件的 `mcpIntegration` 设为 `false`，属跨插件协同动作，不进 v1（§7）。
+原决策：`@hyzyn/dsh-codegraph` 的托管行会被插件自身重写（F2），接管它需要同时把该插件的
+`mcpIntegration` 设为 `false`，属跨插件协同动作，不进 v1。
+
+**实施后修正为：不改该插件的设置，但它的托管行照常接管。** 理由与实测见 §8.1 与 §12.2——
+「需要同时关掉联动」这个前提经实测不成立（该插件重写托管块时保留 `disabled`），而不接管恰恰会把
+本机唯一实际存在的 native 行留在原地，省 token 依旧归零。
 
 ---
 
@@ -297,7 +302,7 @@ node scripts/adopt.mjs [--profile web] [--dsh-home <path>] [--file <path>]
 - 不处理含 `!!js` 的 server 条目。
 - 不要求 GUI 入口。
 - `url` / `headers` 原样搬运即可，不做传输改造。
-- 不迁移 `@hyzyn/dsh-codegraph` 的托管行（D8）。
+- 不处理 `@hyzyn/dsh-codegraph` 的**设置**（D8）；但它写下的 `dsh-mcp-client` 托管行会被接管。
 
 ---
 
@@ -323,7 +328,9 @@ node scripts/adopt.mjs [--profile web] [--dsh-home <path>] [--file <path>]
 1. **不劫持包名**。把 `@deepseek-ai/dsh-mcp-client` 解析到本插件能让全世界写的行自动走懒加载，但代理工具名是单例 `mcp`（F10），且同 scope 重名会直接抛错（F13）：N 个 `dsh-mcp-client` 行 = N 个插件实例 = N 次注册同名工具 → 直接失败。要落地必须先做**模块级单例 registry**，属架构级改动。
 2. **不在插件启动时自动接管**。
 3. **不做 GUI**。
-4. **不迁移 `@hyzyn/dsh-codegraph` 的托管行**（D8）。
+4. **不处理 `@hyzyn/dsh-codegraph` 的设置**（D8）：不改它的 `mcpIntegration`，不参与跨插件协同。但它
+   写下的 `dsh-mcp-client` 托管行会被**像其它 native 行一样接管**——D8 原先「不迁移」的理由经实测不
+   成立，见 §8.1、§12.2。
 5. **不处理 `--patch` 覆盖层**：它是合法层（`dsh --help:15-16`），但 v1 只在计划里报出，不读写。
 6. **不为 `dsh-mcp-client` 添加本插件不支持字段的实现**（`reconnect`、`failOnStartupError`）。
 
@@ -335,24 +342,180 @@ node scripts/adopt.mjs [--profile web] [--dsh-home <path>] [--file <path>]
 | --- | --- | --- |
 | V1 | `Entry.update()` 究竟会把什么写进哪个文件（D2(b) 的危险已由源码推断，但未实测） | 在隔离 profile 上调用并 `git diff` 前后比对。**注意：D2 已定案不采用 (b)**，此项仅为记录风险，不阻塞实施 |
 | V2 | ~~`disabled` 覆盖是否按数组顺序匹配~~ | **因 D3 改为就地改写而作废**：不再依赖层顺序。F11 的层序知识仍需保留（解释为何不能追加覆盖） |
-| V3 | 被禁用的 `dsh-codegraph-managed` 行是否会被该插件重写回来 | 禁用后触发一次 codegraph 同步，`git diff` 观察 |
-| V4 | `dsh --profile web --dump-config` 对 `disabled` 条目的呈现形式（AD2、AD10 依赖它） | 在带禁用条目的隔离 profile 上执行 |
+| V3 | 被禁用的 `dsh-codegraph-managed` 行是否会被该插件重写回来 | **已补，结果见 §8.1** |
+| V4 | `dsh --profile web --dump-config` 对 `disabled` 条目的呈现形式（AD2、AD10 依赖它） | **已补，结果见 §8.2** |
 | V5 | ~~「同层重名工具注册会失败」~~ | **已由源码验证**（F13，`dsh-tools/lib/index.js:2538`），无需实测；实测可选 |
 | V6 | 行解析器的最小充分文法；解析器需同时识别 `dsh-mcp-client` 行与本插件的 `servers` 数组 | 对两个真实 patch 文件跑解析并断言 round-trip 一致。**本机现状实测**：home 层 34 行、0 处 `!!js`、4 处块式数组；profile 层 98 行、**5 处 `!!js`**、1 处流式数组 `[...]`、16 处块式数组；缩进层级覆盖 0/2/4/6/8/10 |
+
+### 8.0 隔离沙箱（V3/V4 与 AD10 的公共前提）
+
+`dsh --profile web --dump-config` 会往 profile 目录写 `cordis.yml`，所以**对真实 `~/.dsh` 跑不了**
+（实测：`EROFS: read-only file system, open '/home/wings/.dsh/profiles/web/cordis.yml'`——本机不是只读
+盘，是运行沙箱拦下的写入；无论哪种原因，结论相同：需要一个副本）。
+
+副本由 `.tmp/bootstrap-sandbox.sh` 生成（`.tmp/` 已在 `.gitignore` 内）：
+
+```bash
+.tmp/bootstrap-sandbox.sh            # -> .tmp/iso
+DSH_HOME=$PWD/.tmp/iso dsh --profile web --dump-config
+```
+
+它复制 web profile 的 `package.json` / `pnpm-lock.yaml` / `pnpm-workspace.yaml` / `cordis.patch.yml`
+与 home 层 patch，并**摘掉两个 bundle**，理由各一：
+
+1. `@xmanrui/dsh-im` 是 `file:` 依赖，指向同级 checkout，副本装不上，且与本命令无关；
+2. `dsh-config-manager` **会在启动时按自己的状态整份重写 profile patch 层**。实测：带上它跑一次
+   `--dump-config`，复制进去的 105 行 `cordis.patch.yml` 变回一个光秃秃的 `[]`。**沙箱的 patch 层被
+   测试对象改写，就不成其为沙箱**——这一条同时也印证了 §6 表格里「config-manager 整份重写」那行风险。
+
+### 8.1 V3 — 被禁用的托管行会被 codegraph 重写回来吗
+
+**结论：不会。** 两条路径都实测过，`disabled: true` 都保留。
+
+取证对象：`~/.dsh/profiles/web/node_modules/@hyzyn/dsh-codegraph/lib/index.js`，导出纯函数
+`syncManagedMcpRow(lines, decision)`（`:114-232`）。
+
+```bash
+# 在沙箱 home 层的托管行里就地插入 disabled: true，然后跑该插件的同步纯函数
+node --input-type=module -e '
+const mod = await import("/home/wings/.dsh/profiles/web/node_modules/@hyzyn/dsh-codegraph/lib/index.js")
+const lines = ["", "# --- dsh-codegraph mcp managed (auto-generated; do not edit) ---", "- insert:", "    - id: mcp-codegraph-managed", "      name: \x27@deepseek-ai/dsh-mcp-client\x27", "      disabled: true", "      config:", "        serverName: codegraph", "        transport: stdio", "        command: codegraph", "        args:", "          - serve", "          - \x27--mcp\x27", "        cwd: /home/wings", "# --- end dsh-codegraph mcp managed ---", ""]
+for (const d of [{ targetCwd: "/home/wings", manageEnabled: true }, { targetCwd: "/tmp/elsewhere", manageEnabled: true }]) {
+  const o = mod.syncManagedMcpRow(lines, d)
+  console.log(JSON.stringify(d), "changed:", o.changed, "disabled 保留:", o.lines.join("\n").includes("disabled: true"))
+}'
+```
+
+实测输出：
+
+```
+{"targetCwd":"/home/wings","manageEnabled":true} -> changed: false | disabled survives: true
+{"targetCwd":"/tmp/elsewhere","manageEnabled":true} -> 走重写路径：changed: true | disabled survives: true | cwd 被对齐回 /home/wings
+```
+
+机制：该插件的 `own` 块路径（`:185-200`）复用解析出的行对象，只对齐 `config.cwd`，其余字段原样
+`yaml.dump` 回去；`disabled` 是行级字段，落在往返里。**唯一的例外是 `mcpIntegration: false`**
+（`:166-180`）：那条路径会**整行删除**托管行——这是该插件自己的设置，本命令不去动它（D8），且删除对
+省 token 而言是更强的结果，不是风险。
+
+**同时修正一处设计文档未写的事实**：该插件重写区块时会把整块经 js-yaml 重新序列化，因此
+`args` 列表的缩进与引号风格会变（实测 `- serve` / `- '--mcp'` 缩进从 10 空格变成 8）。也就是说
+**I3「非目标行逐字节不变」只在「不触发 codegraph 重写」的前提下成立**。接管命令本身不改非目标行，
+但用户事后触发一次 codegraph 同步，那个区块会整体重排——这是该插件的行为，不是本命令的。
+
+### 8.2 V4 — `--dump-config` 怎么呈现 `disabled`
+
+**结论：原样打印 `disabled: true`，且不报任何警告。**
+
+探针 profile（`.tmp/iso/profiles/webtest/cordis.patch.yml`）同时放一条禁用行和一条启用行：
+
+```bash
+DSH_HOME=$PWD/.tmp/iso dsh --profile webtest --dump-config
+```
+
+组合结果片段（`:541-553`）：
+
+```yaml
+- id: probe-native
+  name: '@deepseek-ai/dsh-mcp-client'
+  disabled: true
+  config:
+    serverName: probe-disabled
+    ...
+- id: probe-native-live
+  name: '@deepseek-ai/dsh-mcp-client'
+  config:
+    serverName: probe-live
+```
+
+两行都在、`disabled` 保留，可据此判定 AD2/AD10 的「该条目的 `disabled` 为真」。
+
+**顺带实测到 F11 的静默失效指纹**（这是 AD2 要断言 stderr 干净的原因）：在该 profile 的 patch 层
+追加一条针对 **home 层** id 的 `disabled: true` 覆盖：
+
+```bash
+dsh: [.../webtest/cordis.patch.yml] patch: entry "mcp-codegraph-managed" not found
+```
+
+**退出码仍是 0**，而 home 层那一行照旧启用。这正是 D3 改成「就地改写」要绕开的坑。
+
+### 8.3 V6 — 解析器的充分性
+
+**结论：原计划「自写行解析器」被证伪，改为 js-yaml + 行级定位的混合方案。**
+
+原计划要自写一个行解析器同时读 `dsh-mcp-client` 行与本插件的 `servers` 数组，并断言 round-trip 一致。
+实测下来这条不成立，原因是 **js-yaml 不提供节点字节位置**：要"哪一行、哪个区间"，只能自己按缩进扫；
+但要"这一行的完整语义"，手写扫描做不到（`!!js`、流式数组、块标量、锚点都要）。最终方案拆成两半：
+
+| 关注点 | 用什么 | 为什么 |
+| --- | --- | --- |
+| 现在到底配了什么 | `dsh --profile <p> --dump-config`（§3.1） | 四层 patch 语义只有 `applyEntryPatches` 算得出 |
+| 语义解析 | js-yaml + `JSON_SCHEMA.extend(JsExpr)`（与 `dsh-app-boot` 同一套方言） | 与宿主逐字同构 |
+| 字节区间 | 自写缩进扫描（`splitSource` / `itemHeader` / `outermostItem` / `findRowEnd` / `findServersList`） | js-yaml 不记位置 |
+| 写回 | 只替换算出来的字节区间，其余字节原样 | 保住注释、空行与 `!!js` |
+
+语法覆盖面的实测样本（两个真实文件，见 §8.0 沙箱）：
+
+| 层 | 行数 | `!!js` | 流式数组 | 块式数组 | 缩进层级 |
+| --- | --- | --- | --- | --- | --- |
+| home `~/.dsh/cordis.patch.yml` | 34 | 0 | 0 | 4 | 0/2/4/6/8 |
+| profile `profiles/web/cordis.patch.yml` | 105 | 5 | 1（`args: !!js "[...]"`） | 16 | 0/2/4/6/8/10 |
+
+扫描器只被要求处理**它真的会遇到的两件事**：`- id: X` / `- insert:` 形态的序列项，和
+`servers:` 下的块式/空流式序列。遇到无法界定的形状（非空流式 `servers:`）就报错退出，不猜。
+
+> **本节派生出一条设计文档没写、但实现必须有的东西**：`findServersList` 返回的
+> `itemIndent` 是**破折号**所在列，而 `renderServerEntry` 需要知道破折号列才能把键放到它右边两列——
+> 第一版把 `itemIndent` 当成键缩进用，实测直接产出把新服务器嵌进上一台服务器内部的非法 YAML
+> （AD2 立刻以 `bad indentation of a mapping entry` 失败）。这条已在 `renderServerEntry` 的
+> 文档注释里写死。
 
 ---
 
 ## 9. 里程碑
 
-| 阶段 | 内容 | 出口判据 |
+| 阶段 | 内容 | 出口判据 | 结果 |
+| --- | --- | --- | --- |
+| M0 | 补 §8 的 V3、V4、V6（V1 不阻塞、V2 作废、V5 已验） | 三条各有一条可复现命令与实测输出归档到本文件 | ✅ §8.1 / §8.2 / §8.3 |
+| M1 | 修 F4（检测现算）+ 回归测试；处理 D4 的公开 API 影响 | AD6、AD8、AD12 | ✅ 惰性 getter + 4 条新用例；`lib/index.d.ts` 导出清单不变，第 4 参类型放宽 |
+| M2 | `src/adopt.ts` 纯函数 + 单测 | 单测覆盖 adopt / disable / skip 三类分支，每条留验红记录 | ✅ 三个模块（`adopt.ts` / `adopt-patch.ts` / `adopt-compose.ts`）+ 50 条用例 |
+| M3 | `scripts/adopt.mjs` dry-run（含 `--json`、`--dsh-home`） | AD1、AD4、AD5、AD11 | ✅ |
+| M4 | `--write` + 备份 + 并发校验 | AD2、AD3、AD9、AD14、AD15 | ✅ |
+| M5 | 宿主集成验证 | AD7、AD10、AD13 | ✅ AD7 落在 `connection.e2e.test.ts`；AD10 在隔离 profile 上跑通 |
+| M6 | 文档与发布 | README/README-zh 增补命令说明；`docs/configuration.md` 增补接管的取舍；`package.json` 的 `files` 决定是否发布 `scripts/adopt.mjs`（I10）；CHANGELOG 记录 | ✅ 见 §11 |
+
+### 验红记录（AD12）
+
+测试跑的是**构建产物**（`import '../../lib/…'`），所以「改 `src/` 不构建」不会让任何用例变红——
+这一点在 M1 上实测过：把 `src/index.ts` 改回快照版本、不重新 `build`，3 条新用例照旧全绿，只有改
+`lib/index.js` 才红。因此每一次验红都是**改构建/发布产物**（`lib/` 或 `scripts/`），用
+`.tmp/red-proof.mjs`（一条命令跑完全部用例，改完自动还原，清单在 `.tmp/cases.json`）：
+
+```bash
+node .tmp/red-proof.mjs     # 9/9 cases went red with the fix reverted
+```
+
+| 被撤销的修复 | 变红的用例 | 观察到的断言 |
 | --- | --- | --- |
-| M0 | 补 §8 的 V3、V4、V6（V1 不阻塞、V2 作废、V5 已验） | 三条各有一条可复现命令与实测输出归档到本文件 |
-| M1 | 修 F4（检测现算）+ 回归测试；处理 D4 的公开 API 影响 | AD6、AD8、AD12 |
-| M2 | `src/adopt.ts` 纯函数 + 单测 | 单测覆盖 adopt / disable / skip 三类分支，每条留验红记录 |
-| M3 | `scripts/adopt.mjs` dry-run（含 `--json`、`--dsh-home`） | AD1、AD4、AD5、AD11 |
-| M4 | `--write` + 备份 + 并发校验 | AD2、AD3、AD9、AD14、AD15 |
-| M5 | 宿主集成验证 | AD7、AD10、AD13 |
-| M6 | 文档与发布 | README/README-zh 增补命令说明；`docs/configuration.md` 增补接管的取舍；`package.json` 的 `files` 决定是否发布 `scripts/adopt.mjs`（I10）；CHANGELOG 记录 |
+| 序列项结束位置取首行而非末行 | `finds the end of the last item, not the end of its first line` | 追加点落进上一台服务器内部 |
+| 行的区间用「外层 `- insert:` 整块」 | `finds the second row of a block that holds two` | 查第二行时用第一行的 id 抛错 |
+| `insertDisabled` 取行内第一个像 `name:` 的行 | `is not fooled by a nested name: inside the row` | `disabled` 落进嵌套块 → 后续 YAML 解析失败 |
+| 已 `disabled` 的行改成「可行动的 skip」 | `is idempotent: a second run writes nothing and takes no new backup` | 第二次退出码 1、且新增备份 |
+| 写入逐文件进行、失败不回滚 | `leaves every file alone when the second one cannot be written` | 第一个文件已改、第二个没改 |
+| F4：检测在 `apply` 时快照 | `stops reporting a server the loader no longer declares` | 状态里仍在报 `dsh-mcp-client` |
+| 惰性 getter 只在渲染时取一次 | `re-reads the loader on every render, not once per process` | 三次渲染给出同一份名单 |
+| 只认条目级 `disabled`，不认行级 | `ignores entries the other plugin has disabled` | 被禁用的行仍被列为冲突 |
+| 入口判定不解析软链（`bin` 入口静默失效） | `runs when invoked through a symlink, the way a `bin` entry is` | 退出码 0 但**什么都不打印**——看起来像「无事可做」，而不是像安装坏了 |
+| I1 的字节数断言是否真的敏感 | `registers the exact surface the I1 invariant pins` | `1525 !== 1526` |
+
+**两条没能验红、已如实说明**：
+
+- `findServersList` 里「只认同级 `- `」的缩进过滤。原以为它是防「追加点落进嵌套 `args`」的关键，
+  实测撤销它仍然全绿——因为结束位置由 `findRowEnd` 从找到的那一项算起，嵌套项也算出同一个追加点。
+  它现在被注释标记为**防御性**而非承重。
+- B3 / B5 / B6 三条（见 §12.1）的回归测试在位，但它们的「撤销」不落在任何**单行**注入上：B3 是整段
+  解析策略换了，B5 / B6 是分支内的取值。按「没留痕的测试视为未验红」的标准，这三条只在**测试覆盖**
+  意义上成立。
 
 ---
 
@@ -369,3 +532,133 @@ node scripts/adopt.mjs [--profile web] [--dsh-home <path>] [--file <path>]
 | 不变量 | 新增 I8（公开导出面）、I9（配置往返）、I10（发布物边界）；I3 措辞明确「目标行允许新增 `disabled` 一行」 |
 | 事实 | F3 降级为「仅记录」；F9 行号改 `:38-42`；F7 改 `:277`；F4 承接参数改 `src/proxy-tool.ts:131`；F2 引用改 `:210` + `:238-250`；F1 补「目标文件是 home 层」；新增 F13；补全六个取证包的版本；新增 §1.4 字段差异两条；§1.3 数字标注为估算 |
 | 待验证 | V5 由源码验证后降级；V2 因 D3 改动作废；V1 保留为记录 |
+
+---
+
+## 11. 实施结果（本轮）
+
+M0–M6 全部落地。下面是**实现与本文的差异**，以及交付时才知道的事。
+
+### 11.1 与本文不同的地方
+
+| # | 本文写的 | 实际做的 | 为什么 |
+| --- | --- | --- | --- |
+| 1 | `NativeRow` 只有 `{ id, serverName?, raw, layer, file }` | 还有 `fields`（`config` 的字段 + 行自身的 `id` / `name` / `disabled`）、`span`、`keyIndent`、`disabled`、`jsExpression` | 文本级改写需要**字节区间**，而 Plan 需要在决定前读字段。本文只说"raw 逐字节保留"，没说区间从哪来 |
+| 2 | 一个 `src/adopt.ts` | 拆成 `adopt.ts`（决策）/ `adopt-patch.ts`（字节手术）/ `adopt-compose.ts`（读组合结果） | 三个关注点的失败模式完全不同，混在一起测不出边界 |
+| 3 | `AdoptSkipReason` 五种 | 六种，多一个 `cannot-work` | 计划阶段就拦下**本插件加载会直接抛错**的条目（stdio 无 command 等）。不改的话，接管会把一个能跑的配置换成加载失败的配置 |
+| 4 | `skip` 非空即退出码 1 | 新增 `plan.blocked` 计数，只有"本该搬却没搬"才影响退出码 | 否则**第二次 `--write` 必然失败**（那一行已经 `disabled`，会被算作 skip），AD3 的"第二次退出码 0"自相矛盾。这是设计文档里的一个真实漏洞 |
+| 5 | 无 | `--file` 模式（只处理一个 patch 文件，不组合） | §3.4 列了这个参数但没说它做什么。它的存在让"零写入"能被**程序级**断言（test/unit/adopt-run.test.ts），而不只靠读干跑输出 |
+| 6 | 未提 | 检测 `dsh-config-manager` 之外的第二个沙箱陷阱：它启动时整份重写 profile layer | 见 §8.0 第 2 条 |
+| 7 | `skip` 原因 `already-lazy` 一处语义 | 两种语义各有一条 `detail` | 一个是"行已禁用"，一个是"服务器已在 servers 里但行还要禁用"。D7 把判定拆开了，原因名却共用一个，靠 `detail` 区分 |
+
+### 11.2 交付时才知道的事实（补进 §1 序列）
+
+| 编号 | 事实 | 取证 |
+| --- | --- | --- |
+| F14 | `dsh --dump-config` 的层标签是 `base, patched by <layer>` 形式，**文件路径在 `patched by` 之后**，不是标签本身 | `.tmp/iso/dump-web.json`：`# == dsh-mcp-lazy, patched by …/profiles/web/cordis.patch.yml`。据此才有 `fileOfMarker` |
+| F15 | `@hyzyn/dsh-codegraph` 重写托管区块时**整块经 js-yaml 重新序列化**，缩进与引号风格会变 | §8.1 末段。推论：I3 的"逐字节不变"只在"不触发该插件重写"的前提下成立 |
+| F16 | 本机 `~/.dsh` 是**运行沙箱拦下的写**（`EROFS`），不是磁盘只读 | 直接对真实 home 跑 `dsh --profile web --dump-config` 的报错。存档：验证必须走隔离副本（§8.0） |
+
+### 11.3 验收实测摘要
+
+| 编号 | 判定 | 证据 |
+| --- | --- | --- |
+| AD1（A） | ✅ | 干跑前后 sha256 与 mtime 完全相同，0 个备份文件 |
+| AD2（A） | ✅ | 组合结果里该条目 `disabled: true`，`dsh` stderr **为空**（F11 指纹不出现） |
+| AD3（A） | ✅ | 第二次退出码 0、`Wrote 0 file(s)`、字节不变、备份数不变 |
+| AD4（A） | ✅ | `--json` 的 `edits` 区间与原文逐字节一致；去掉新增行后与原文件全等（home 1057→1078 B，差 21 B = 一行） |
+| AD5（A） | ✅ | `reconnect` 行进 `skip: unsupported-field`，且**不产生任何 disable** |
+| AD6（A） | ✅ | 3 条新用例；验红见 §9 |
+| AD7（A） | ✅ | `connection.e2e.test.ts`：真子进程 fixture，被禁用的条目启动计数 **0**，对照组 1 |
+| AD8（A） | ✅ | `measure-surface.mjs` 1525 B / 11 参 / 381 token；`apply()` 路径断言同值（验红：注入 1 字节 → 1526 ≠ 1525） |
+| AD9（A） | ✅ | 两份备份存在且命名合规；用备份覆盖后 sha256 与接管前**完全相同** |
+| AD10（M） | ✅ | 隔离 profile：`codegraph` 出现在本插件 `servers` 下，原条目 `disabled: true`——注意这正是 §12.2 里「按实现修正文档」的那一条：codegraph 的托管行**是**接管对象 |
+| AD11（A） | ✅（换判据） | 只读副本在本机造不出（fuseblk 上 `chmod` 不生效，见 §12.3），改用三条确定性等价断言：目标文件不存在 / 组合失败 / **注入写入失败后回滚**，都退出码 2 且零损失 |
+| AD12（A） | ✅ | §9 的 9 项验红（`lib/` 与 `scripts/` 的**构建/发布产物**），另加 §12.1 里由独立核验发现的 6 条缺陷修复 |
+| AD13（A） | ✅ | 干净环境复现见 §11.4 |
+| AD14（A） | ✅ | 模拟整份重写后：`disabled` 仍真、7 台服务器一台不丢、`idleTimeout`/`outputGuard` 未丢 |
+| AD15（M） | ⚠️ 部分 | 保护机制在（写前逐文件校验 sha256，且**先校验完全部再写任何一份**），`--json` 真的报出两份文件的 digest 供比对，回归测试断言该 digest 的**正确性**（即保护的前置条件）；但「运行中途文件被改」这条时序**无法做成端到端断言**——单进程内不能在计划与写入之间插入外部改动，本机是 root 且 fuseblk 上 `chmod` 不生效（实测 `chmod a-w` 后仍能写）。**作为补偿**，写入改成两阶段 + 失败回滚，并把它做成了可注入的回归测试（§12.1 B4）：那一条比 AD15 更强，因为它断言的是「写到一半也不丢数据」 |
+
+### 11.4 干净环境复现（AD13）
+
+```bash
+rm -rf lib node_modules .tmp/iso
+pnpm install --frozen-lockfile
+pnpm run check          # typecheck → build → test:types
+pnpm test               # 271 tests, 65 suites, all pass
+```
+
+### 11.5 发布物边界（I10）
+
+`scripts/adopt.mjs` **是发布物**，并且新增了 `bin` 入口，理由：
+
+- 它对使用者有用（`npx dsh-mcp-lazy-adopt` 比 `node node_modules/.../scripts/adopt.mjs` 好记得多）；
+- 它不改变运行时依赖数：`js-yaml` 与 `@types/js-yaml` 进的是 `devDependencies`，`scripts/` 不在运行时
+  路径上（`src/index.ts` 不 import 它），I7 的"运行时依赖 1 个"因此仍成立；
+- `exports` 新增 `./adopt` 指向 `lib/adopt.js`，让纯函数可被别的工具复用。
+
+---
+
+## 12. 交付前的独立核验（对抗式复核）与缺陷修复
+
+M0–M6 完成后做了一次**独立子代理核验**：它拿到的是本文与仓库，任务是「找反例，不要信声明」。
+它复现了 AD1 / AD3 / AD4 / AD5 / I3 / I7 / I8（其中 AD4 用它自己写的验证器，不 import 仓库代码；
+I8 用 `tsc --strict` 编四种调用形态验证「第 4 参放宽」不是破坏性变更），也**报了 6 条真实缺陷**。
+
+这一段是关键留痕：**「我自己测了并通过」和「别人来找反例也没找到」是两件不同的事。**
+
+### 12.1 已修（每条都补了回归测试 + 验红）
+
+| # | 缺陷 | 症状 | 修法 |
+| --- | --- | --- | --- |
+| B1 | `insertDisabled` 取行内**第一个**像 `name:` 的行 | 行里若有块标量 / `env:` 含 `name:`，`disabled: true` 被插进那个嵌套块 → **YAML 解析失败**，而命令 exit 0 报「Wrote N file(s)」。实测后续 `dsh --dump-config` **exit 1**：宿主机直接起不来，且该行并没有被禁用 | 只认**行自身键缩进**（`keyIndent`）上的 `name:` |
+| B2 | 行的字节区间是**外层 `- insert:` 整块** | 一个 insert 块里两条行 → 查第二条时用第一条的 `id` 抛错，整份命令 exit 2，**一台服务器也接管不了**；即使只查第一条，编辑区间也把兄弟行圈进去 | 按「`- insert:` 列表里那**一个** item」定位；`parseRow` 接受光标本身即行的形态 |
+| B3 | 行的 `name:` 在**哪个文件**是猜的 | 只存在 `- id:` + `config:` 的**补丁行**（合法形态）会被 `parseRow` 拒 → 行被静默丢弃 → `--json` 给出 `{files:[],blocked:0,skips:[]}`、exit 0、「Nothing to do」，**双跑照旧** | 改为询问**每个可编辑文件**；「自己声明挂载哪个插件」的那份优先；实在定位不到就按 `unresolved` **拒绝并计入退出码**（不再有静默丢弃这条路径） |
+| B4 | 写入是**逐文件**的，失败**不回滚** | 第二个文件写失败时第一个已经落盘 → 该服务器**两个插件都不管了**（既没进 servers，原行又被禁用） | 两阶段：先把所有备份 + 所有新内容写进同目录临时文件（可失败的一步全在这里），再统一 rename 换入；换入阶段出错则用备份回滚已换入的文件 |
+| B5 | `servers:` **行尾注释**被判为非法值 | `servers:   # add servers below`（块式列表+注释）→ exit 2，**整个文件里所有服务器都接管不了** | 行尾 `#` 之后不算值；值以 `#` 开头则视为空 |
+| B6 | `insertDisabled` / `renderServerEntry` 硬编码 `\n` | CRLF 文件被写成**混合行尾**（3 行 LF-only）；每次追加还**多一个空行** | 行尾由文件决定并一路传下去；追加时的换行取「插入点之后那个换行序列」，没有才自己补 |
+
+另外修了三条核验点出的**表述/体验**问题：
+
+- `PlannedEdit.start/end` 的注释写「byte offset」，实际是 **JS 字符串下标（UTF-16 code unit）**。AD4 的字节级结论仍然成立（区间按字符切、区间外原样搬运），但按字节消费这些数字会切错位置——注释已改成「字符下标」，并说明为什么区间仍然逐字节保真。
+- `--file` 模式的头部原先打印的是**真实 `~/.dsh` 的两个路径**，看着像要改真实配置；现在打印它真正处理的那一个文件。
+- `--json` 的 `wrote` 在「传了 `--write` 但无事可做」时也是 `true`，名字像结果、实际是标志位。现在同时给出 `writeRequested` 与 `filesWritten`。
+
+### 12.2 核验同样确认了「实现与文档的一处真实矛盾」（已按实现改文档）
+
+本文 §7.4 / D8 写着**不迁移 `@hyzyn/dsh-codegraph` 的托管行**，但实现里没有任何 id 或来源排除，
+隔离沙箱里它**确实接管了** `mcp-codegraph-managed`（§11.3 的 AD10 还把它记成 ✅）。
+
+**结论是改文档、不是改代码**，理由有三条，且都有实测支撑：
+
+1. **D8 原文的理由已经不成立**：它说接管 codegraph 的托管行需要同时把该插件的 `mcpIntegration`
+   设为 `false`，属跨插件协同。实测（§8.1）**不需要**——该插件重写托管块时保留 `disabled`，
+   所以就地禁用一次即可，它不会把行改回来。
+2. **不接管才是真问题**：这正是本命令存在的理由（生态各方都写 `dsh-mcp-client` 行）。把 codegraph
+   排除在外等于对最常见的来源之一视而不见，而它恰恰是本机唯一实际存在的 native 行。
+3. 「不处理跨插件协同」的边界仍然成立：命令不改 codegraph 的任何设置，只改它写下的那一行。
+
+因此 §7.4 的措辞改为「不处理 `@hyzyn/dsh-codegraph` 的**设置**（`mcpIntegration`），但会像对待任何
+其它 native 行一样接管它的托管行」。**这是本设计文档唯一一处按实现修正的地方。**
+
+### 12.3 未能验红、已如实降级的条目
+
+- **AD11 的字面场景**（`--dsh-home <只读副本> --write` → exit 2 且副本未改）在本机**造不出来**：
+  文件系统是 fuseblk，**`chmod` 不生效**（实测 `chmod 444` 后仍可写、`chmod 555` 目录后仍能建文件），
+  且进程是 root。现已改为三条等价的确定性断言：目标文件不存在 / 组合失败 / **注入写入失败**（12.1 B4）。
+  最后一条比 AD11 要求的更强：它不仅要求「零写入」，还验证了「写到一半之后的回滚」。
+- **AD15 的时序**（计划与写入之间被外部改动）单进程内无法注入；现断言该保护的前置条件——
+  `--json` 报出的 digest 与文件实际 digest 一致，并在 §11.3 标注为「部分」。
+- **`findServersList` 的「只认同级 `- `」过滤**：撤销它测试仍然全绿（结束位置由 `findRowEnd` 决定），
+  已在代码注释里标为**防御性**而非承重。
+
+### 12.4 修完之后的复核
+
+```bash
+node .tmp/red-proof.mjs     # 9/9 cases went red with the fix reverted（用例清单在 .tmp/cases.json）
+```
+
+九条验红覆盖：B1、B2、B4、幂等性（`blocked` 语义）、F4 惰性检测、惰性 getter、行级 `disabled`、
+`bin` 软链入口、I1 字节数断言。B3 / B5 / B6 的回归测试在位，但它们的「撤销」不落在任何**单行**注入上
+（B3 是结构性的：整段解析策略换了；B5 / B6 是分支内的取值），故未列入本清单——按「没留痕的测试视为
+未验红」的标准，这三条只在**测试覆盖**意义上成立，在此如实说明。

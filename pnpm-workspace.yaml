@@ -1,12 +1,17 @@
-# pnpm 12 refuses to install anything published within the last 24 hours unless
-# it is listed here. That is a good default and a bad fit for this project.
+# pnpm 12 has a built-in 24-hour minimum release age. That default is
+# **non-strict**: when a dependency is too fresh, pnpm records it here
+# automatically and the install still succeeds (exit 0). Listing the scope
+# explicitly just makes that exception visible in the diff and keeps it stable
+# across machines, instead of relying on pnpm silently rewriting this file.
+#
+# Strict mode (ERR_PNPM_NO_MATURE_MATCHING_VERSION, exit 1) only kicks in when
+# `minimumReleaseAge` is configured explicitly -- this file does not set it.
+# Verified on pnpm 12.3.4: with only minimumReleaseAgeExclude present, a fresh
+# install of a just-published prerelease exits 0.
 #
 # The @deepseek-ai/* packages are the harness this plugin integrates with. It is
 # published as a fast-moving prerelease, and the versions this plugin is
-# developed against are typically hours old. Without this exception `pnpm
-# install` fails outright on a fresh clone -- for every contributor, in CI,
-# everywhere -- until the pin happens to age past the window, and then fails
-# again the next time it moves.
+# developed against are typically hours old.
 #
 # The scope is the whole extent of the exception. Everything else in the tree,
 # including every transitive dependency of the MCP SDK, is still subject to the

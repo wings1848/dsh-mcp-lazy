@@ -27,8 +27,11 @@ coverage/
 .nyc_output/
 *.tsbuildinfo
 
-# Local scratch: measurement runs write here when asked to
+# Local scratch: measurement runs and the adopt command's sandbox live here.
+# pnpm drops a content-addressable store beside whichever directory it installs
+# into, so installing inside the sandbox leaves one here too.
 .tmp/
+.pnpm-store/
 
 # CI unpacks the npm tarball here to check the published entry actually imports
 .dist-check/

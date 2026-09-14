@@ -281,3 +281,48 @@ pass that on. Disable the other plugin's rows, or move them here, to get the sav
 Calls now go through one tool, `mcp({ tool, args })`, and a promoted tool is named
 `serverName__originalName` (`src/naming.ts`). `serverName` need only be unique inside this
 plugin's own list (`src/index.ts`).
+
+### Let the command do it
+
+Doing that by hand is easy to get wrong in one direction in particular: a row that keeps
+running registers the same server's schemas through the *other* plugin, and nothing anywhere
+says so. `adopt` performs the whole move, offline:
+
+```bash
+npx dsh-mcp-lazy-adopt                 # dry run; prints the plan and writes nothing
+npx dsh-mcp-lazy-adopt --write         # applies it
+npx dsh-mcp-lazy-adopt --json          # the plan, machine-readable
+```
+
+| flag | what it does |
+| --- | --- |
+| `--profile <name>` | which profile to read (default `web`) |
+| `--dsh-home <path>` | override `$DSH_HOME`: point it at a copy to rehearse |
+| `--file <path>` | handle one patch file only, without composing |
+| `--write` | apply; without it this is a dry run |
+| `--json` | machine-readable plan, including the byte ranges it would change |
+| `--allow-skip` | do not treat skipped rows as a failure |
+
+Exit codes: `0` nothing to do or success, `1` some rows were skipped, `2` the environment
+refused (unreadable file, unrecognised structure, or a file that changed between reading and
+writing) — and **nothing is written** on `2`.
+
+What it guarantees, and what a hand edit does not:
+
+- It reads what is *actually* mounted, by composing every patch layer the way a boot does
+  (`dsh --profile <p> --dump-config`) — a patch file is an operation list, so grepping one file
+  cannot answer "what is configured now".
+- The original row gets `disabled: true` **in place**. Appending an override row elsewhere
+  would not work: a patch's `config` replaces rather than merges, and a patch against an `id`
+  that does not exist *yet* is skipped with a warning and exit code 0.
+- Everything outside the changed byte ranges is untouched. Comments, blank lines and `!!js`
+  expressions survive exactly, which no parse-and-dump round trip manages.
+- A row it cannot move safely — `reconnect`, `failOnStartupError`, a duplicate `serverName`, a
+  `!!js` expression, a server this plugin could not load — is **reported with a reason and left
+  alone**, rather than half-moved.
+- Each file it writes is backed up first, as `<file>.bak-<yyyymmdd-hhmmss>-before-adopt`, and
+  the file's digest is re-checked immediately before writing.
+
+Run it while the host is stopped. The web profile reloads its patch layer live, and
+`dsh-config-manager` rewrites the same file from its own state, so a write from here can lose
+to a write from there.

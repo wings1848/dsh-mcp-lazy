@@ -68,12 +68,29 @@ dsh plugin --profile <你的profile> add dsh-mcp-lazy
 
 重启 profile 即可。每个字段的说明见 [docs/configuration.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/configuration.md)（英文）。
 
-从 `@deepseek-ai/dsh-mcp-client` 迁移：把每行的 `config` 塞进 `servers` 数组的一个条目里，去掉各自的
-`id`。传输层字段含义完全一致。
+### 从 `@deepseek-ai/dsh-mcp-client` 搬过来
 
-有两个字段本插件**没有实现** —— `reconnect` 和 `failOnStartupError`。把它们一起搬过来会**报错**
-而不是被忽略，所以加载时会直接告诉你原因，而不是留下一个「看起来配了、其实没生效」的设置。
-字段名拼错同理。
+这个生态里写 MCP 配置的各方**都产出 `@deepseek-ai/dsh-mcp-client` 行**：config-manager 面板写死了
+这个包名、`@hyzyn/dsh-codegraph` 会写一条托管行、手写配置也照这个惯例来。这种行会把每个 MCP 工具
+注册成**真原生工具**，schema 因此进入每一次请求 —— 而同一台服务器在两边都配着，省 token 的效果就
+**静默归零**（不报错、不冲突，只有 `mcp({})` 的状态输出会提示你）。
+
+`adopt` 命令替你做这次搬迁：
+
+```bash
+dsh-mcp-lazy-adopt                 # 干跑：只打印计划，什么都不写
+dsh-mcp-lazy-adopt --write         # 落盘，每个文件先留一份带时间戳的备份
+```
+
+它读的是**实际挂载了什么**（`dsh --profile <p> --dump-config`，四层 patch 全部组合过），
+把原来的行**就地**标成 `disabled: true`，再把服务器追加进本插件的 `servers` 列表。文件里**别的字节
+一个不动** —— 注释、空行、`!!js` 表达式全部逐字节保留；搬不动的行会给出**原因**而不是靠猜。
+请在宿主**停机时**执行：web profile 的 patch 层是热重载的，而 `dsh-config-manager` 也会整份重写
+同一个文件。
+
+有两个字段本插件**没有实现** —— `reconnect` 和 `failOnStartupError`。带这两个字段的行会被报成
+`unsupported-field` 并**原样留下**（不会搬、也不会禁用），所以加载不会因为一个「看起来配了、其实没
+生效」的设置而失败。字段名拼错同理；行自己的 `id` 会被丢掉，因为它命名的是加载器那一行、不是服务器。
 
 ## 模型看到的工具
 
@@ -97,6 +114,7 @@ mcp({})                                # 状态：工具数 / 连接态 / 缓存
 | [docs/troubleshooting.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/troubleshooting.md) | 启动失败、冷缓存、名字解析 |
 | [docs/development.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/development.md) | 构建、测试、为什么 `link-dsh` 是必须的 |
 | [docs/design/plan.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/plan.md) | 实现计划与验收标准 |
+| [docs/design/adopt-native-rows.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/adopt-native-rows.md) | `adopt` 命令：设计、不变量、验收标准，以及实施时才发现的事 |
 | [docs/design/parity-pi-mcp-adapter.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/parity-pi-mcp-adapter.md) | 与 `pi-mcp-adapter` v2.33.0 的逐模块审计 |
 
 > 详细文档目前只有英文版。这份中文 README 是入口页。
@@ -117,7 +135,7 @@ mcp({})                                # 状态：工具数 / 连接态 / 缓存
 
 ```bash
 pnpm install
-pnpm test          # 构建 → 重链 peer 包 → 195 个用例
+pnpm test          # 构建 → 重链 peer 包 → 271 个用例
 pnpm run check     # typecheck（含测试）→ build
 ```
 

@@ -73,13 +73,36 @@ That installs the package into the profile and registers its bundle patch, which
 
 Restart the profile. Every field is documented in [docs/configuration.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/configuration.md).
 
-Migrating from `@deepseek-ai/dsh-mcp-client`: move each row's `config` into one entry of
-`servers` and drop the per-row `id`. The transport fields keep their meaning.
+### Moving servers off `@deepseek-ai/dsh-mcp-client`
 
-Two of that plugin's fields are **not** implemented here — `reconnect` and `failOnStartupError`
-— and carrying them over is an error rather than a no-op, so the load fails with an
-explanation instead of leaving a setting that looks configured and does nothing. The same
-applies to a misspelled field name.
+Every writer of MCP configuration in this ecosystem emits a `@deepseek-ai/dsh-mcp-client` row:
+the config-manager panel hardcodes that package name, `@hyzyn/dsh-codegraph` writes a managed
+row, and a hand-written config follows the same convention. Such a row registers each MCP tool
+as a real tool, so its schemas enter every request — and a server listed in **both** places
+cancels the saving this plugin exists for, with no error and nothing to notice. (The `mcp({})`
+status output does warn you, which is how you usually find out.)
+
+`adopt` does the move for you:
+
+```bash
+dsh-mcp-lazy-adopt                 # dry run: prints the plan, writes nothing
+dsh-mcp-lazy-adopt --write         # applies it, with a timestamped backup of each file
+```
+
+It reads what is *actually* mounted (`dsh --profile <p> --dump-config`, so all four patch layers
+are composed), marks each original row `disabled: true` **in place**, and appends the server to
+this plugin's `servers` list. Nothing else in the file is touched — comments, blank lines and
+`!!js` expressions are preserved byte for byte — and a row it cannot move safely is reported
+with a reason instead of being guessed at. Run it while the host is stopped: the web profile
+reloads its patch layer live, and `dsh-config-manager` rewrites the same file from its own
+state.
+
+A server that does move arrives with only the fields this plugin implements. Two of the other
+plugin's fields are **not** implemented here — `reconnect` and `failOnStartupError` — and
+carrying them over is an error rather than a no-op, so a row that sets either one is reported as
+`unsupported-field` and left exactly where it is: no half-move, and no load failure from a
+setting that would look configured and do nothing. A misspelled field name is reported the same
+way. The per-row `id` is dropped, because it names the loader row rather than the server.
 
 ## What the model sees
 
@@ -103,6 +126,7 @@ mcp({})                                # status: tool count, connection state, c
 | [docs/troubleshooting.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/troubleshooting.md) | failed servers, cold cache, name resolution |
 | [docs/development.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/development.md) | build, test, why `link-dsh` is mandatory |
 | [docs/design/plan.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/plan.md) | implementation plan and acceptance criteria |
+| [docs/design/adopt-native-rows.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/adopt-native-rows.md) | the `adopt` command: design, invariants, acceptance criteria, and what implementing it turned up |
 | [docs/design/parity-pi-mcp-adapter.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/parity-pi-mcp-adapter.md) | module-by-module audit against `pi-mcp-adapter` v2.33.0 |
 
 ## Known limitations
@@ -129,7 +153,7 @@ The v1 boundary, stated plainly:
 
 ```bash
 pnpm install
-pnpm test          # builds, relinks the peer packages, runs 195 tests
+pnpm test          # builds, relinks the peer packages, runs 271 tests
 pnpm run check     # typecheck (sources and tests) then build
 ```
 

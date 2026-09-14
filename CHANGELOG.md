@@ -7,7 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `adopt`: a command that moves servers configured under `@deepseek-ai/dsh-mcp-client` into
+  this plugin. Every writer of MCP configuration in this ecosystem produces such a row — the
+  config-manager panel, `@hyzyn/dsh-codegraph`, and a hand-written config — and a server listed
+  in both places cancels the saving this plugin exists for with no error and no symptom. The
+  command composes every patch layer the way a boot does, marks each original row
+  `disabled: true` in place, and appends the server to this plugin's `servers` list. Non-target
+  bytes are untouched — comments, blank lines and `!!js` expressions survive exactly — a row it
+  cannot move safely is reported with a reason instead of being half-moved, and the default is a
+  dry run. Reachable as `dsh-mcp-lazy-adopt`, or `node scripts/adopt.mjs`.
+- `mcp-lazy/adopt` is now an export path, so the planning function can be reused: `planAdoption`
+  is pure, takes the composed rows and the existing config, and returns a plan whose `edits`
+  array is a byte-exact edit script.
+- The docs now say how many tests there are without being wrong: 263 in 64 suites.
+
 ### Fixed
+
+- The "also configured in `@deepseek-ai/dsh-mcp-client`" notice in `mcp({})` is no longer
+  computed once at plugin load. The loader re-runs only the entries whose *own* config changed,
+  so a server moved out of the other plugin by editing another layer left this plugin reporting
+  a conflict that no longer existed — wrong in the direction that hides a restored saving. The
+  server list is now read per status render.
+- A co-mounted row is recognised as disabled whether the flag sits on the loader entry or on the
+  row itself (`disabled: true` inside an `insert` item), which is the form `adopt` writes.
+- The `adopt` command's entry-point check resolves symlinks, so the `dsh-mcp-lazy-adopt` bin entry
+  actually runs once installed. Comparing `process.argv[1]` against `import.meta.url` without
+  resolving them made the installed command print nothing and exit 0 — indistinguishable from
+  "nothing to do", which is the one failure this command must never have.
+- Three ways `adopt` could damage or silently skip a configuration, found by an adversarial review
+  before release. Each is covered by a test that fails without its fix, and the fixes are described
+  in `docs/design/adopt-native-rows.md` §12:
+  - `disabled: true` could be inserted *inside* a nested block — a block scalar or an `env:` map
+    holding a `name:` of its own — producing a file the loader cannot parse, after reporting
+    success. The flag now goes on the row's own key column.
+  - A row's editable range covered its whole `- insert:` block, so a block holding two rows made the
+    second one unfindable and aborted the run. Ranges are now one item each.
+  - A row was located by the file the dump's provenance marker named, and dropped when that file did
+    not literally declare it. Rows are now looked up in every patch layer, and one that cannot be
+    located is reported and counted as a failure rather than skipped in silence.
+- `adopt --write` is now all-or-nothing. Every replacement is written beside its file first and the
+  files are swapped in afterwards; a failure in the swap restores the already-swapped files from
+  their backups. Previously a failure on the second file left the first one rewritten, which
+  disables the original row without adding the server anywhere — the server then belongs to neither
+  plugin.
+- `adopt` no longer rejects a whole file over a trailing comment on the `servers:` key, and no
+  longer leaves a CRLF file with mixed line endings or an extra blank line.
+
+### Changed
+
+- `createProxyTool`'s fourth parameter accepts `readonly string[] | (() => readonly string[])`.
+  Passing an array still works, so this is not a break for existing callers; passing a function
+  makes the conflict notice live.
 
 - Documentation: three files still said 179 tests where the suite had grown to
   195, and none of them explained how to configure a server that needs a token.
