@@ -50,6 +50,7 @@ import { fileURLToPath } from 'node:url'
 
 import { LAZY_PACKAGE, LAZY_PLUGIN, NATIVE_MCP_PLUGIN, parseComposedDump } from '../lib/adopt-compose.js'
 import { findNativeRow } from '../lib/adopt-patch.js'
+import { basenameOf } from '../lib/adopt-paths.js'
 import { applyEdits, planAdoption, resolveNativeRows, summarizePlan } from '../lib/adopt.js'
 
 /** Exit codes, named so the intent survives a refactor. */
@@ -454,11 +455,6 @@ function writePlan(plan, digests) {
   }
 
   return { backups, written }
-}
-
-/** A file's name without its directory. */
-function basenameOf(file) {
-  return file.slice(file.lastIndexOf('/') + 1)
 }
 
 /** The `yyyymmdd-hhmmss` stamp the backup name carries. */
