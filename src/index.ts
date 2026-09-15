@@ -23,7 +23,7 @@ import {
   PROXY_TOOL_NAME,
 } from './schema.js'
 import type { Config as ConfigShape, OutputGuardConfig } from './types.js'
-import { SERVER_NAME_PATTERN } from './types.js'
+import { SERVER_NAME_PATTERN, UNNAMED_NATIVE_NAME } from './types.js'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'mcp-lazy'
@@ -243,7 +243,12 @@ function detectNativelyRegistered(ctx: Context): string[] {
     if (options?.name !== NATIVE_MCP_PLUGIN) continue
     if (raw.disabled === true || options.disabled === true) continue
     const serverName = options.config?.serverName
-    names.push(typeof serverName === 'string' && serverName !== '' ? serverName : '(unnamed)')
+    // A `!!js` expression stays a raw node here: the loader evaluates it only for
+    // the config it hands the plugin, so this reads an object where mcp-client
+    // sees the evaluated name. The placeholder is what the listing reports on.
+    names.push(
+      typeof serverName === 'string' && serverName !== '' ? serverName : UNNAMED_NATIVE_NAME,
+    )
   }
   return names
 }

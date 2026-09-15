@@ -495,19 +495,21 @@ describe('conflict with @deepseek-ai/dsh-mcp-client', () => {
     assert.doesNotMatch(text, /\(off\)/)
   })
 
-  it('ignores unrelated plugin entries', async () => {
+  it('reports a nameless native entry but not an unrelated plugin', async () => {
     const { ctx, registered } = contextWithLoader([
       { options: { name: '@deepseek-ai/dsh-mcp-client' } },
       { options: { name: 'dsh-better-sidebar' } },
     ])
     apply(ctx as never, resolved([]))
 
-    // The first entry has no `serverName`, so mcp-client's own Config rejects it
-    // and it registers no tool -- there is nothing to warn about. The unrelated
-    // plugin must not be named either.
+    // The first entry has no `serverName` at all, so there is nothing to match
+    // against this gateway's list -- and saying nothing would hide the `!!js` row
+    // that *does* register tools under its evaluated name. The unrelated plugin
+    // must not be named, and the notice must not name a server either.
     const text = await statusOf(registered)
+    assert.match(text, /⚠ 1 entry in @deepseek-ai\/dsh-mcp-client has no serverName/)
     assert.doesNotMatch(text, /dsh-better-sidebar/)
-    assert.doesNotMatch(text, /dsh-mcp-client/)
+    assert.doesNotMatch(text, /configured both here and in/)
   })
 
   it('says nothing when no other plugin is mounted', async () => {

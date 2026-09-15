@@ -120,7 +120,18 @@ const NATIVE_MODE =
   'which registers MCP tools natively instead of leaving them behind this gateway\'s search'
 
 /**
- * The three states a natively-enabled server can be in here, and the advice each
+ * The case that needs a sentence of its own because its advice differs again.
+ *
+ * `near` is the local spelling each native name nearly matched, in order, already
+ * narrowed to one entry per folded name — and each carries its own `disabled`
+ * flag, because that flag belongs to the row rather than to the sentence.
+ */
+interface CaseDetail {
+  readonly near: readonly { readonly name: string; readonly disabled: boolean }[]
+}
+
+/**
+ * The four states a natively-enabled server can be in here, and the advice each
  * one actually needs.
  *
  * `both`: this gateway has it enabled too, so one of the two copies has to go.
@@ -128,9 +139,13 @@ const NATIVE_MODE =
  * be to clear that flag, because *adding* it would create a second entry with the
  * same `serverName` and the registry constructor throws `mcp-lazy: duplicate
  * serverName` on those, so following a "move it here" would stop the plugin from
- * loading. `absent`: there is nothing here yet.
+ * loading. `different-case`: a configured name differs only by case, so it is a
+ * different entry rather than this one, and "add it here" would leave two servers
+ * serving the same thing. `absent`: there is nothing here at all.
  */
-type NativeState = 'both' | 'listed-disabled' | 'absent'
+type NativeState = 'both' | 'listed-disabled' | 'different-case' | 'absent'
+
+const NO_CASE_DETAIL: CaseDetail = { near: [] }
 
 /**
  * One warning about a server the native MCP plugin is enabled for.
@@ -140,14 +155,28 @@ type NativeState = 'both' | 'listed-disabled' | 'absent'
  * "both run" contradicted its own output; and the reason is {@link NATIVE_MODE},
  * that plugin's mode, rather than a claim about what enters a request.
  *
+ * Every piece of advice here has to be *executable*. Two earlier wordings failed
+ * that: "move it here" against an entry this gateway already lists, because a
+ * second entry with the same `serverName` throws in the registry constructor, and
+ * "spell them the same" against several native spellings, because mcp-client
+ * raises `serverName "X" is already in use by another mcp-client instance` for the
+ * second row and rejects it. So `different-case` reduces rows instead of adding
+ * or merging them.
+ *
  * @param names - The servers this sentence names. Never empty.
- * @param state - Which of the three states above these servers are in.
+ * @param state - Which of the four states above these servers are in.
+ * @param detail - `different-case`'s near matches. Absent for the others.
  * @returns One line for the status listing.
  */
-function renderNativeWarning(names: readonly string[], state: NativeState): string {
-  const plural = names.length === 1 ? '' : 's'
-  const verb = names.length === 1 ? 'is' : 'are'
-  const them = names.length === 1 ? 'it' : 'them'
+function renderNativeWarning(
+  names: readonly string[],
+  state: NativeState,
+  detail: CaseDetail = NO_CASE_DETAIL,
+): string {
+  const single = names.length === 1
+  const plural = single ? '' : 's'
+  const verb = single ? 'is' : 'are'
+  const them = single ? 'it' : 'them'
   const subject = `${names.length} server${plural} (${names.join(', ')})`
   if (state === 'both') {
     return (
@@ -162,10 +191,67 @@ function renderNativeWarning(names: readonly string[], state: NativeState): stri
       `${them} again would be a duplicate — or disable the native row if you do not need it.`
     )
   }
+  if (state === 'different-case') {
+    // De-duplicated by spelling, and marked *per spelling*: `disabled` belongs to
+    // the row, not to the sentence. A sentence-wide flag dropped the marker from a
+    // switched-off row that sat beside a live one, and a trailing suffix after two
+    // names read as applying to the last of them — both measured on a local
+    // `Mine`(disabled) beside `Yours`(enabled) against native `mine` and `yours`.
+    const named = new Map<string, boolean>()
+    for (const match of detail.near) {
+      if (!named.has(match.name)) named.set(match.name, match.disabled)
+    }
+    const near = [...named]
+      .map(([name, disabled]) => `\`${name}\`${disabled ? ' (switched off)' : ''}`)
+      .join(' and ')
+    return (
+      `⚠ ${subject} ${verb} enabled in @deepseek-ai/dsh-mcp-client, ${NATIVE_MODE}. ` +
+      `This gateway's list uses ${near}, differing only by case, so the names are ` +
+      `separate namespaces rather than one entry. If these are all the same server, keep ` +
+      `one row and delete the rest; if not, spell the difference out.`
+    )
+  }
   return (
     `⚠ ${subject} ${verb} enabled in @deepseek-ai/dsh-mcp-client, ${NATIVE_MODE}. ` +
     `This gateway does not have ${them}; add ${them} here, or disable the native row if ` +
     'you do not need it.'
+  )
+}
+
+/**
+ * One warning about natively-enabled entries whose `serverName` this gateway cannot use.
+ *
+ * `detectNativelyRegistered` substitutes `UNNAMED_NATIVE_NAME` (`src/types.ts`) when
+ * an entry's `serverName` is not a plain string, and the pattern filter would
+ * otherwise drop it in silence. Silence is the wrong default: a `!!js` expression
+ * stays a raw node in the loader's options — the loader evaluates it only for the
+ * config it hands the plugin — so that row registers tools under its evaluated
+ * name while this gateway has nothing to match against.
+ *
+ * The wording claims *matchability*, not absence, because the two cannot be told
+ * apart here: a config that spells the placeholder literally (or a caller passing
+ * it through the exported array seam) puts the same string in the same list as a
+ * genuine substitution does. "No `serverName` this gateway can match" is true of
+ * both, while "has no `serverName`" would be false of the literal one.
+ *
+ * The count covers exactly the strings that failed the pattern, which is the same
+ * set the sentence enumerates: a substituted placeholder, a literal one, and names
+ * that are merely invalid — blank, or past the length limit — are all counted, so
+ * the number and the claim cannot drift apart. Elements that are not strings are
+ * not counted: `detectNativelyRegistered` never emits one, and a caller passing
+ * junk gets no invented rows.
+ *
+ * @param count - How many such entries the native list reported. Never zero.
+ * @returns One line for the status listing.
+ */
+function renderUnmatchedNotice(count: number): string {
+  const single = count === 1
+  return (
+    `⚠ ${count} entr${single ? 'y' : 'ies'} in @deepseek-ai/dsh-mcp-client ` +
+    `${single ? 'has' : 'have'} no serverName this gateway can match — a \`!!js\` expression, ` +
+    `a missing or empty field, or a name outside ${SERVER_NAME_PATTERN}. ` +
+    `${single ? 'It is' : 'They are'} not compared against this gateway's list, so check ` +
+    `${single ? 'it' : 'them'} by hand.`
   )
 }
 
@@ -183,18 +269,26 @@ function renderStatus(
   nativeServers: NativeServersSource = [],
 ): string {
   const reported = resolveNativeServers(nativeServers)
+  // One name is one server: a duplicated loader entry is the same server, and the
+  // second instance fails mcp-client's own "already in use" check.
+  const unique = [...new Set(reported)]
   // mcp-client's own Config requires a `serverName` matching this pattern
-  // (`z.string().required().pattern(SERVER_NAME_PATTERN)`, the same regex), and an
-  // entry that fails it registers nothing — no schemas, nothing to warn about.
-  // That drops the `(unnamed)` placeholder `detectNativelyRegistered` substitutes
-  // for a config-less entry along with empty or over-long names from the exported
-  // array seam, whose elements need not even be strings: `RegExp.test` coerces,
-  // and `join` renders `null` as nothing, so `(undefined)` reached a sentence as
-  // `()`. One name is one server: a duplicated loader entry is the same server, and
-  // the second instance fails mcp-client's own "already in use" check.
-  const native = [...new Set(reported)].filter(
+  // (`z.string().required().pattern(SERVER_NAME_PATTERN)`, the same regex). Empty or
+  // over-long names cannot address a server either, and neither can elements of the
+  // exported array seam, which need not even be strings: `RegExp.test` coerces, and
+  // `join` rendered `undefined` as nothing, so `()` reached a sentence. The
+  // `(unnamed)` placeholder is dropped here and reported on separately below.
+  const native = unique.filter(
     name => typeof name === 'string' && SERVER_NAME_PATTERN.test(name),
   )
+  // Every string the filter above dropped, not just the placeholder: a name that
+  // is merely invalid is just as unmatchable, and counting only one of the two
+  // would make the number disagree with the sentence that prints it. Counted on
+  // the raw list, not on `unique`: two unmatchable rows are two rows to look at,
+  // while two entries sharing a real name are one server.
+  const unmatchedCount = reported.filter(
+    name => typeof name === 'string' && !SERVER_NAME_PATTERN.test(name),
+  ).length
   // Membership of this gateway's config is not the same question as whether it
   // serves the server: `status` lists disabled entries too, and a disabled entry
   // needs "switch it on here", not "add it here".
@@ -202,14 +296,42 @@ function renderStatus(
     servers.filter(server => !server.disabled).map(server => server.serverName),
   )
   const listedHere = new Set(servers.map(server => server.serverName))
+  // A native name differing from a configured one only by case is not that entry:
+  // both plugins key servers by exact name, so the two are separate namespaces.
+  // Enabled spellings win, because the sentence has to name the row the reader can
+  // act on — a switched-off case-variant is not it when a live one exists, and the
+  // listing prints both. Within a pass, insertion order decides.
+  const localByLower = new Map<string, { name: string; disabled: boolean }>()
+  const remember = (server: ServerStatus): void => {
+    const lower = server.serverName.toLowerCase()
+    if (!localByLower.has(lower)) {
+      localByLower.set(lower, { name: server.serverName, disabled: server.disabled })
+    }
+  }
+  for (const server of servers) {
+    if (!server.disabled) remember(server)
+  }
+  for (const server of servers) {
+    if (server.disabled) remember(server)
+  }
   const both: string[] = []
   const listedDisabled: string[] = []
+  const differentCase: string[] = []
+  const caseNear: { name: string; disabled: boolean }[] = []
   const absent: string[] = []
   for (const name of native) {
     if (enabledHere.has(name)) both.push(name)
     else if (listedHere.has(name)) listedDisabled.push(name)
-    else absent.push(name)
+    else {
+      const near = localByLower.get(name.toLowerCase())
+      if (near === undefined) absent.push(name)
+      else {
+        differentCase.push(name)
+        caseNear.push(near)
+      }
+    }
   }
+  const caseDetail: CaseDetail = { near: caseNear }
   // Named unconditionally: these are the only lines here that describe a problem
   // with the *configuration* rather than with a server, and they silently cancel
   // the reason the plugin was installed.
@@ -218,7 +340,11 @@ function renderStatus(
     ...(listedDisabled.length === 0
       ? []
       : ['', renderNativeWarning(listedDisabled, 'listed-disabled')]),
+    ...(differentCase.length === 0
+      ? []
+      : ['', renderNativeWarning(differentCase, 'different-case', caseDetail)]),
     ...(absent.length === 0 ? [] : ['', renderNativeWarning(absent, 'absent')]),
+    ...(unmatchedCount === 0 ? [] : ['', renderUnmatchedNotice(unmatchedCount)]),
   ]
 
   if (servers.length === 0) {

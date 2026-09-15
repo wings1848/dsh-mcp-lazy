@@ -14,6 +14,24 @@
 export const SERVER_NAME_PATTERN = /^[A-Za-z0-9_-]{1,32}$/
 
 /**
+ * Stands in for a natively-enabled entry whose `serverName` is not a plain
+ * string, so no name can be reported for it.
+ *
+ * `detectNativelyRegistered` substitutes this. The status listing does not read
+ * the constant back: it treats *every* string the pattern above rejects the same
+ * way, so a substituted placeholder, a literal spelling of this one, and a name
+ * that is merely invalid — blank, or past the length limit — all end up in one
+ * notice. The pattern rejects this string, so no *legal* name can equal it, and
+ * mcp-client's own Config rejects it as well.
+ *
+ * Because those three are one list after the fact, the notice claims
+ * *matchability* rather than absence: "has no `serverName`" would be false of the
+ * literal spelling, while "no `serverName` this gateway can match" is true of all
+ * three.
+ */
+export const UNNAMED_NATIVE_NAME = '(unnamed)'
+
+/**
  * When a server's process may exist.
  *
  * "Connect during activation" means the plugin contacts the server while it is

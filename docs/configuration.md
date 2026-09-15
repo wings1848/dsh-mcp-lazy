@@ -274,11 +274,16 @@ this plugin's own config says about it (`src/proxy-tool.ts`):
 | --- | --- | --- |
 | *is configured both here and in* | enabled on both sides | remove it from one of the two |
 | *This gateway lists it with ``disabled: true``* | here, but switched off | clear that flag — adding a second entry with the same `serverName` is an error — or disable the native row |
+| *This gateway's list uses `Mine`, differing only by case* | a configured name differs only by case | keep one row and delete the rest if these are one server, or spell the difference out |
 | *This gateway does not have it* | only on the other plugin | add it here, or disable the native row if you do not need it |
+| *has no serverName this gateway can match* | a computed `!!js` name, a missing or empty field, or a name outside the schema's pattern | look at those rows by hand — the name it registers under cannot be read from the configuration file |
 
 The notice describes the other plugin's *mode*, not what is in the current request. A native row
 whose own config that plugin rejects — it requires `transport` plus `command` or `url`, not just
 `serverName` — registers no tools at all, and neither does one whose server is down.
+
+Only the first row's advice is interchangeable: disabling the native row is offered everywhere
+else *"if you do not need it"*, because on its own it leaves nothing serving that server.
 
 ```yaml
 # before: one row per server

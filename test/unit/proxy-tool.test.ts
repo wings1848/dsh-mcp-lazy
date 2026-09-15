@@ -377,24 +377,156 @@ describe('status', () => {
     assert.doesNotMatch(text, /both here and in/)
   })
 
-  it('ignores a native entry whose serverName cannot register anything', async () => {
-    // `detectNativelyRegistered` substitutes `(unnamed)` for an entry with no
-    // usable serverName. mcp-client's own Config rejects those
-    // (`serverName: z.string().required().pattern(SERVER_NAME_PATTERN)`), so the
-    // entry registers zero tools -- there are no schemas to warn about, and
-    // saying so would be false.
+  it('reports an entry it cannot match instead of dropping it in silence', async () => {
+    // `detectNativelyRegistered` substitutes `(unnamed)` when an entry's
+    // `serverName` is not a plain string, which is exactly what a `!!js`
+    // expression looks like in the loader's raw options -- and such a row does
+    // register tools under its evaluated name, so dropping it was a false
+    // negative. The notice claims matchability, not absence: a config that spells
+    // the placeholder literally puts the same string in the same list, and "has no
+    // serverName" would be false of that one.
     const registry = new McpGatewayRegistry(config([]))
     const text = await statusWith(registry, ['(unnamed)'])
-    assert.doesNotMatch(text, /dsh-mcp-client/)
-    assert.doesNotMatch(text, /unnamed/)
+    assert.match(
+      text,
+      /⚠ 1 entry in @deepseek-ai\/dsh-mcp-client has no serverName this gateway can match/,
+    )
+    assert.match(text, /It is not compared against this gateway's list/)
+    assert.match(text, /so check it by hand/)
+    assert.ok(text.includes('a name outside /^[A-Za-z0-9_-]{1,32}$/'))
+    assert.doesNotMatch(text, /\(unnamed\)/)
+    assert.doesNotMatch(text, /registers MCP tools natively/)
+    assert.doesNotMatch(text, /has no plain/)
+
+    // It coexists with the named sentences rather than replacing them.
+    const mixed = await statusWith(registry, ['codegraph', '(unnamed)'])
+    assert.match(mixed, /⚠ 1 server \(codegraph\) is enabled in @deepseek-ai\/dsh-mcp-client/)
+    assert.match(mixed, /⚠ 1 entry in @deepseek-ai\/dsh-mcp-client has no serverName/)
+
+    // Two nameless rows are two rows, even though they report the same placeholder
+    // -- the dedupe that collapses a repeated *name* must not collapse these, and
+    // the rest of the sentence has to agree with its own count.
+    const twice = await statusWith(registry, ['(unnamed)', '(unnamed)'])
+    assert.match(
+      twice,
+      /⚠ 2 entries in @deepseek-ai\/dsh-mcp-client have no serverName this gateway can match/,
+    )
+    assert.match(twice, /They are not compared against this gateway's list/)
+    assert.match(twice, /so check them by hand/)
   })
 
-  it('ignores empty and over-long names from the array form', async () => {
-    // The exported array seam is caller-supplied, and both of these fail
-    // mcp-client's pattern, so neither can put a schema into a request.
+  it('tells a case-only difference apart from an absent server', async () => {
+    // Both plugins key servers by exact name, so `Mine` beside `mine` is not the
+    // same entry, and "add it here" would leave two servers doing the same job.
+    const registry = new McpGatewayRegistry(config([entry({ serverName: 'Mine' })]))
+    const text = await statusWith(registry, ['mine'])
+    assert.match(text, /⚠ 1 server \(mine\) is enabled in @deepseek-ai\/dsh-mcp-client/)
+    assert.match(text, /This gateway's list uses `Mine`, differing only by case/)
+    assert.match(text, /separate namespaces rather than one entry/)
+    assert.match(text, /keep one row and delete the rest/)
+    assert.match(text, /Mine — 0 tools/)
+    assert.doesNotMatch(text, /This gateway does not have/)
+
+    const two = await statusWith(
+      new McpGatewayRegistry(
+        config([entry({ serverName: 'Mine' }), entry({ serverName: 'Yours' })]),
+      ),
+      ['mine', 'yours'],
+    )
+    assert.match(two, /⚠ 2 servers \(mine, yours\) are enabled in/)
+    assert.match(two, /This gateway's list uses `Mine` and `Yours`, differing only by case/)
+  })
+
+  it('names the live spelling and marks each switched-off one', async () => {
+    // A switched-off case-variant must not be the row named when a live one exists.
+    const preferLive = await statusWith(
+      new McpGatewayRegistry(
+        config([entry({ serverName: 'Mine', disabled: true }), entry({ serverName: 'mine' })]),
+      ),
+      ['MINE'],
+    )
+    assert.match(preferLive, /This gateway's list uses `mine`, differing only by case/)
+
+    // The marker belongs to the spelling, not to the sentence: a switched-off row
+    // beside a live one must still carry it, and a sentence-wide flag dropped it.
+    const mixedOff = await statusWith(
+      new McpGatewayRegistry(
+        config([entry({ serverName: 'Mine', disabled: true }), entry({ serverName: 'Yours' })]),
+      ),
+      ['mine', 'yours'],
+    )
+    assert.match(mixedOff, /This gateway's list uses `Mine` \(switched off\) and `Yours`,/)
+    assert.doesNotMatch(mixedOff, /`Yours` \(switched off\)/)
+
+    // Two switched-off rows, each marked: a trailing suffix after both names read as
+    // applying to the last of them.
+    const bothOff = await statusWith(
+      new McpGatewayRegistry(
+        config([
+          entry({ serverName: 'Mine', disabled: true }),
+          entry({ serverName: 'Yours', disabled: true }),
+        ]),
+      ),
+      ['mine', 'yours'],
+    )
+    assert.match(
+      bothOff,
+      /This gateway's list uses `Mine` \(switched off\) and `Yours` \(switched off\),/,
+    )
+  })
+
+  it('reduces rows when several native spellings fold onto one configured name', async () => {
+    // Naming that spelling twice read as a claim that there were two of it.
+    const folded = await statusWith(
+      new McpGatewayRegistry(config([entry({ serverName: 'MINE' })])),
+      ['Mine', 'mine', 'MiNe'],
+    )
+    assert.match(folded, /⚠ 3 servers \(Mine, mine, MiNe\) are enabled in/)
+    assert.equal((folded.match(/`MINE`/g) ?? []).length, 1)
+
+    // Several native spellings cannot all be renamed to the one local spelling:
+    // mcp-client rejects the second row with that serverName ("already in use by
+    // another mcp-client instance"), so the advice reduces rows instead of merging
+    // names.
+    const twoVariants = await statusWith(
+      new McpGatewayRegistry(config([entry({ serverName: 'MINE' })])),
+      ['Mine', 'mine'],
+    )
+    assert.match(twoVariants, /⚠ 2 servers \(Mine, mine\) are enabled in/)
+    assert.match(twoVariants, /keep one row and delete the rest/)
+    assert.equal((twoVariants.match(/`MINE`/g) ?? []).length, 1)
+    assert.doesNotMatch(twoVariants, /Spell .* the same/)
+
+    // The same listing can hold both sentences without them contradicting: the
+    // different-case one must not ask for the rename that would recreate the
+    // duplicate the `both` sentence just asked to remove.
+    const together = await statusWith(
+      new McpGatewayRegistry(config([entry({ serverName: 'Mine' })])),
+      ['mine', 'Mine'],
+    )
+    assert.match(together, /⚠ 1 server \(Mine\) is configured both here and in/)
+    assert.match(together, /⚠ 1 server \(mine\) is enabled in @deepseek-ai\/dsh-mcp-client/)
+    assert.doesNotMatch(together, /Spell .* the same/)
+  })
+
+  it('counts every string it cannot match, not only the placeholder', async () => {
+    // A blank name and an over-long one are just as unmatchable as a substituted
+    // placeholder, and counting only the placeholder made the number disagree with
+    // the sentence printing it: a blank row beside one `!!js` row said `1 entry`
+    // for two rows.
     const registry = new McpGatewayRegistry(config([]))
-    assert.doesNotMatch(await statusWith(registry, ['']), /dsh-mcp-client/)
-    assert.doesNotMatch(await statusWith(registry, ['x'.repeat(33)]), /dsh-mcp-client/)
+    assert.match(
+      await statusWith(registry, ['']),
+      /⚠ 1 entry in @deepseek-ai\/dsh-mcp-client has no serverName this gateway can match/,
+    )
+    assert.match(
+      await statusWith(registry, ['x'.repeat(33)]),
+      /⚠ 1 entry in @deepseek-ai\/dsh-mcp-client has no serverName this gateway can match/,
+    )
+    assert.match(
+      await statusWith(registry, ['(unnamed)', '']),
+      /⚠ 2 entries in @deepseek-ai\/dsh-mcp-client have no serverName this gateway can match/,
+    )
   })
 
   it('ignores names from the array form that are not strings at all', async () => {

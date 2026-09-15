@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Two of the three residues `0.3.1` declared are gone.** The listing renders a fourth sentence for
+  a native name that differs from one of this gateway's own only by case: both plugins key servers by
+  exact name, so the two are separate entries rather than one, and the old "This gateway does not have
+  it; add it here" left two servers doing the same job while contradicting the listing printed
+  directly above it. It names the local spelling it nearly matched — the *enabled* one when a
+  switched-off variant folds onto it too, and each spelling carries its own `(switched off)` marker
+  rather than one flag for the whole sentence — and its
+  advice reduces rows ("keep one row and delete the rest") rather than merging names. Merging was the
+  first cut's advice and it was not executable: mcp-client answers a second row sharing a
+  `serverName` with `already in use by another mcp-client instance` (`src/proxy-tool.ts`).
+- A natively-enabled entry whose `serverName` this gateway cannot use is no longer dropped in
+  silence. `detectNativelyRegistered` substitutes a placeholder when that field is not a plain
+  string, and that is what a `!!js` expression looks like in the loader's raw options — the loader
+  evaluates it only for the config it hands the plugin — so such a row registers tools under its
+  evaluated name while the listing said nothing at all. The notice enumerates exactly what it counts:
+  a computed expression, a missing or empty field, or a name outside `SERVER_NAME_PATTERN`, which are
+  the strings the same filter drops. The count is taken before deduplication, because two unmatchable
+  rows are two rows while two rows sharing a real name are one server — the first cut said `1 entry`
+  for two rows, and counted the placeholder alone, so a blank row beside a computed one was invisible
+  to it. The wording claims *matchability*, not absence: a configuration may spell the placeholder
+  literally, and "has no `serverName`" would be false of that one.
+- The placeholder has a name and a doc rather than a bare literal inside
+  `detectNativelyRegistered`'s loop: `UNNAMED_NATIVE_NAME` in `src/types.ts`. The listing does not
+  read it back, because it treats every unmatchable string the same way.
+
+The third residue stands. With `directTools: true` this gateway promotes tools natively itself, so
+neither sentence's advice restores the saving on its own; fixing it means threading that setting into
+`renderStatus`, which the registry does not expose (`src/proxy-tool.ts`, `src/registry.ts`). It stays
+declared rather than quietly dropped.
+
+### Changed
+
+- `docs/configuration.md` carries both new sentences in its table of what `mcp({})` says.
+
 ## [0.3.1] - 2026-09-14
 
 ### Fixed
