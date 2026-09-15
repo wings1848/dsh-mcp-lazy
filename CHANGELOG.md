@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-09-15
+
 ### Fixed
 
 - **The native-server warning now accounts for `directTools`.** All four of its sentences give advice
@@ -577,7 +579,8 @@ fail first — and fixed before this release:
   heavily cannot flood the model's context through an error message
   (`src/connection.ts`).
 
-[Unreleased]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.2.1...v0.3.0
