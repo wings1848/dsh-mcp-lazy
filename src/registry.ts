@@ -858,13 +858,14 @@ export class McpGatewayRegistry {
   }
 
   /**
-   * Whether this gateway would register a server's tools as native tools itself.
+   * Whether `directTools` would make this gateway register a server's tools itself.
    *
-   * The status listing asks this before advising a user to move a natively-served
-   * server here: with `directTools` set, arriving here does not keep its schemas
-   * out of the request, so the advice would be incomplete. Computed from the
-   * configuration alone — not from the catalogs — so the answer is the same before
-   * and after a first connect.
+   * Asked while advising a user to bring a natively-served server here, so it reads
+   * the setting that server would serve under rather than what is registered right
+   * now: a disabled entry promotes nothing at the moment — {@link directToolSelections}
+   * skips it — but clearing that flag is what the advice says to do, and then it
+   * would. Computed from the configuration alone, not from the catalogs, so the
+   * answer does not change after a first connect.
    *
    * `'search'` is deliberately not counted. It stages tools until a search matches
    * one, which is the deferred form of promotion rather than a blanket
@@ -896,6 +897,11 @@ export class McpGatewayRegistry {
   directToolSelections(): { serverName: string; tools: ToolMetadata[]; mode: 'all' | 'named' }[] {
     const out: { serverName: string; tools: ToolMetadata[]; mode: 'all' | 'named' }[] = []
     for (const server of this.#servers) {
+      // A disabled entry refuses to connect, so promoting its tools would put tools
+      // in every request whose calls can only fail — `ensureConnected` rejects a
+      // disabled entry outright. Promotion is about the model-facing surface, and
+      // `disabled` means "kept visible in status, never served".
+      if (server.entry.disabled === true) continue
       const setting = server.entry.directTools ?? this.#globalDirectTools
       if (setting === undefined || setting === false || setting === 'search') continue
       const known = this.#known.get(server.entry.serverName)
@@ -923,6 +929,7 @@ export class McpGatewayRegistry {
    */
   searchModeServers(): string[] {
     return this.#servers
+      .filter(server => server.entry.disabled !== true)
       .filter(server => (server.entry.directTools ?? this.#globalDirectTools) === 'search')
       .map(server => server.entry.serverName)
   }

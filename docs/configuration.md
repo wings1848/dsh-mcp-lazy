@@ -65,7 +65,7 @@ top-level YAML array of loader patch entries; `id` is the row the patch layer ta
 | `directTools` | `true` \| string[] \| `'search'` | not promoted | Promote tools out of the proxy into native tools (`src/index.ts`, `src/direct-tools.ts`). |
 | `includeTools` / `excludeTools` | string[] | — | Keep only / drop tools matching these names or globs; include is checked first, exclude wins (`src/naming.ts`). |
 | `searchKeywords` | map of string → string[] | — | Extra ranking keywords per tool, keyed by name or glob (`src/naming.ts`). |
-| `disabled` | boolean | `false` | Keep the entry visible in status but refuse to connect or call (`src/registry.ts`). |
+| `disabled` | boolean | `false` | Keep the entry visible in status but refuse to connect, call, or promote (`src/registry.ts`). |
 | `debug` | boolean | `false` | Forward the stdio child's stderr to the host instead of capturing it (`src/connection.ts`). |
 
 A duplicate `serverName`, a `stdio` entry with no `command`, and a `streamable-http` entry
@@ -193,6 +193,12 @@ row — and promotion is the one setting that makes that insufficient. When it a
 the sentence names it (*"Keeping it here does not stop those schemas while `directTools` is set"*),
 and when a group mixes promoted with unpromoted servers it names only the promoted ones
 (`src/proxy-tool.ts`, `src/registry.ts`).
+
+**A disabled server is never promoted.** `disabled` means "kept visible in status, never served",
+so a native tool for one could only fail — `ensureConnected` rejects the entry outright. Both forms
+follow that: the blanket one registers nothing for it, and `'search'` does not stage it either,
+which matters because a staged tool becomes native as soon as a search matches it
+(`src/registry.ts`).
 
 **The consequence:** a promoted tool is a real tool in the request, so the tool-definition
 prefix changes and the prompt cache is invalidated from the first changed token

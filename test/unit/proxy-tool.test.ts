@@ -593,6 +593,35 @@ describe('status', () => {
     assert.match(all, /Keeping them here does not stop those schemas/)
   })
 
+  it('promotes nothing for a server that is disabled', async () => {
+    // A disabled entry refuses to connect -- `ensureConnected` throws "is disabled in
+    // configuration" -- so registering its tools would put tools in every request
+    // whose calls can only fail. `directToolSelections` read the setting and the
+    // catalog and never looked at `disabled`, so this needed the metadata cache to
+    // even be reachable: connecting is what a disabled entry will not do.
+    const promoted = entry({ serverName: 'off-promoted', disabled: true, directTools: true })
+    cacheServer(promoted, DEMO_TOOLS)
+    assert.deepEqual(new McpGatewayRegistry(config([promoted])).directToolSelections(), [])
+
+    // The plugin-level default is the same question.
+    const globalOff = entry({ serverName: 'off-global', disabled: true })
+    cacheServer(globalOff, DEMO_TOOLS)
+    const global = new McpGatewayRegistry({
+      idleTimeout: 10,
+      servers: [globalOff],
+      directTools: true,
+    })
+    assert.deepEqual(global.directToolSelections(), [])
+  })
+
+  it('stages nothing for a disabled server in search mode', async () => {
+    // The same gap in the other half of promotion: a staged tool becomes native the
+    // moment a search matches it.
+    const staged = entry({ serverName: 'off-staged', disabled: true, directTools: 'search' })
+    cacheServer(staged, DEMO_TOOLS)
+    assert.deepEqual(new McpGatewayRegistry(config([staged])).searchModeServers(), [])
+  })
+
   it('counts every string it cannot match, not only the placeholder', async () => {
     // A blank name and an over-long one are just as unmatchable as a substituted
     // placeholder, and counting only the placeholder made the number disagree with

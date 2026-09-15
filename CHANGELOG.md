@@ -25,10 +25,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The case-only sentence asks it about the *local* spelling, because that is the row its advice tells
   the reader to keep — asking about the native name would always answer no.
 
+- **A `disabled` server is no longer promoted.** `directToolSelections` and `searchModeServers` read
+  the promotion setting and the known catalog but never looked at `disabled`, so a switched-off
+  server's tools were registered as real tools — in every request, while `ensureConnected` rejects a
+  disabled entry outright, which made every call to one fail with *"is disabled in configuration"*.
+  The documented meaning of that flag is "kept visible in status, never served", and promotion now
+  agrees with it. Both halves of promotion were affected: the blanket form registered the tools and
+  the `'search'` form staged them, and a staged tool becomes native the moment a search matches it.
+
+  Reachable only with `directTools` set — it defaults to off — and only through the metadata cache,
+  because connecting is exactly what a disabled entry will not do. That is also why the regression
+  test seeds the cache rather than a stub connection (`src/registry.ts`).
+
 ### Changed
 
-- `docs/configuration.md` notes in its `directTools` section that the status listing names the
-  setting when it applies.
+- `docs/configuration.md` says that a disabled server is not promoted, and that the status listing
+  names `directTools` when it applies.
 
 ## [0.3.2] - 2026-09-15
 
