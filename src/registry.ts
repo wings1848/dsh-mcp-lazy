@@ -858,6 +858,31 @@ export class McpGatewayRegistry {
   }
 
   /**
+   * Whether this gateway would register a server's tools as native tools itself.
+   *
+   * The status listing asks this before advising a user to move a natively-served
+   * server here: with `directTools` set, arriving here does not keep its schemas
+   * out of the request, so the advice would be incomplete. Computed from the
+   * configuration alone — not from the catalogs — so the answer is the same before
+   * and after a first connect.
+   *
+   * `'search'` is deliberately not counted. It stages tools until a search matches
+   * one, which is the deferred form of promotion rather than a blanket
+   * registration, and those servers are reported separately by
+   * {@link searchModeServers}.
+   *
+   * A server that is not configured here still answers from the plugin-level
+   * default, because that is the setting an arrival would inherit.
+   *
+   * @param serverName - The namespace to ask about, configured here or not.
+   * @returns True when promotion would apply to it in this gateway.
+   */
+  promotesNatively(serverName: string): boolean {
+    const setting = this.#byName.get(serverName)?.entry.directTools ?? this.#globalDirectTools
+    return setting === true || (Array.isArray(setting) && setting.length > 0)
+  }
+
+  /**
    * Tools that should be promoted out of the proxy into native tools.
    *
    * Native promotion is the one thing that can move the model-facing surface, so

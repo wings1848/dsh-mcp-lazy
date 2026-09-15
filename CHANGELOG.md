@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The native-server warning now accounts for `directTools`.** All four of its sentences give advice
+  about bringing a server into this gateway, and every one of them assumes that doing so keeps its
+  schemas out of the request. `directTools` breaks that assumption, because it makes this gateway
+  register tools natively itself: "add it here" is then *counterproductive* for a server only the
+  native plugin serves, and "remove it from one of the two" is incomplete for one both serve. Each
+  sentence now ends with the setting named when it applies — *"Keeping it here does not stop those
+  schemas while `directTools` is set, because this gateway registers such tools natively itself."* —
+  and names only the affected servers when a group mixes promoted with unpromoted ones
+  (`src/proxy-tool.ts`, `src/registry.ts`).
+
+  The predicate is `McpGatewayRegistry.promotesNatively`, which reads configuration rather than the
+  catalogs, so its answer does not change after a first connect. It deliberately ignores
+  `directTools: 'search'`, which stages tools until a search matches rather than registering them.
+  The case-only sentence asks it about the *local* spelling, because that is the row its advice tells
+  the reader to keep — asking about the native name would always answer no.
+
+### Changed
+
+- `docs/configuration.md` notes in its `directTools` section that the status listing names the
+  setting when it applies.
+
 ## [0.3.2] - 2026-09-15
 
 ### Fixed

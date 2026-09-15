@@ -120,14 +120,21 @@ const NATIVE_MODE =
   'which registers MCP tools natively instead of leaving them behind this gateway\'s search'
 
 /**
- * The case that needs a sentence of its own because its advice differs again.
- *
- * `near` is the local spelling each native name nearly matched, in order, already
- * narrowed to one entry per folded name — and each carries its own `disabled`
- * flag, because that flag belongs to the row rather than to the sentence.
+ * What one warning needs beyond the names and their state.
  */
-interface CaseDetail {
-  readonly near: readonly { readonly name: string; readonly disabled: boolean }[]
+interface WarningParts {
+  /**
+   * `different-case` only: the local spelling each native name nearly matched, in
+   * order, narrowed to one entry per folded name — each carrying its own
+   * `disabled` flag, because that flag belongs to the row rather than to the
+   * sentence.
+   */
+  readonly near?: readonly { readonly name: string; readonly disabled: boolean }[]
+  /**
+   * The subset of `names` this gateway would register natively itself, because
+   * `directTools` opts them into promotion.
+   */
+  readonly promoting?: readonly string[]
 }
 
 /**
@@ -145,7 +152,31 @@ interface CaseDetail {
  */
 type NativeState = 'both' | 'listed-disabled' | 'different-case' | 'absent'
 
-const NO_CASE_DETAIL: CaseDetail = { near: [] }
+/**
+ * The note that keeps the advice honest when this gateway promotes the server too.
+ *
+ * `directTools` is the one setting that makes this gateway register tools natively
+ * itself, so bringing a server here — or keeping it here — does not stop those
+ * schemas while it is set. Dropping the server entirely still does, and that
+ * option is already in every one of these sentences.
+ *
+ * @param promoting - The subset of the sentence's names that would be promoted.
+ * @param total - How many names the sentence carries, to choose the subject.
+ * @returns One sentence, with a leading space, or an empty string.
+ */
+function promoteCaveat(promoting: readonly string[], total: number): string {
+  if (promoting.length === 0) return ''
+  const subject =
+    promoting.length === total
+      ? total === 1
+        ? 'it'
+        : 'them'
+      : promoting.map(name => `\`${name}\``).join(' and ')
+  return (
+    ` Keeping ${subject} here does not stop those schemas while \`directTools\` is set, ` +
+    'because this gateway registers such tools natively itself.'
+  )
+}
 
 /**
  * One warning about a server the native MCP plugin is enabled for.
@@ -155,67 +186,65 @@ const NO_CASE_DETAIL: CaseDetail = { near: [] }
  * "both run" contradicted its own output; and the reason is {@link NATIVE_MODE},
  * that plugin's mode, rather than a claim about what enters a request.
  *
- * Every piece of advice here has to be *executable*. Two earlier wordings failed
- * that: "move it here" against an entry this gateway already lists, because a
- * second entry with the same `serverName` throws in the registry constructor, and
- * "spell them the same" against several native spellings, because mcp-client
- * raises `serverName "X" is already in use by another mcp-client instance` for the
- * second row and rejects it. So `different-case` reduces rows instead of adding
- * or merging them.
+ * Every piece of advice here has to be *executable*, and *sufficient*. Two earlier
+ * wordings failed the first test: "move it here" against an entry this gateway
+ * already lists, because a second entry with the same `serverName` throws in the
+ * registry constructor, and "spell them the same" against several native
+ * spellings, because mcp-client raises `serverName "X" is already in use by
+ * another mcp-client instance` for the second row and rejects it. The second test
+ * is what {@link promoteCaveat} answers: advice to keep a server here is not enough
+ * while `directTools` registers it natively anyway.
  *
  * @param names - The servers this sentence names. Never empty.
  * @param state - Which of the four states above these servers are in.
- * @param detail - `different-case`'s near matches. Absent for the others.
+ * @param parts - The state's detail and the promoting subset. Empty for the rest.
  * @returns One line for the status listing.
  */
 function renderNativeWarning(
   names: readonly string[],
   state: NativeState,
-  detail: CaseDetail = NO_CASE_DETAIL,
+  parts: WarningParts = {},
 ): string {
   const single = names.length === 1
   const plural = single ? '' : 's'
   const verb = single ? 'is' : 'are'
   const them = single ? 'it' : 'them'
   const subject = `${names.length} server${plural} (${names.join(', ')})`
+  let body: string
   if (state === 'both') {
-    return (
+    body =
       `⚠ ${subject} ${verb} configured both here and in @deepseek-ai/dsh-mcp-client, ` +
       `${NATIVE_MODE}. Remove ${them} from one of the two.`
-    )
-  }
-  if (state === 'listed-disabled') {
-    return (
+  } else if (state === 'listed-disabled') {
+    body =
       `⚠ ${subject} ${verb} enabled in @deepseek-ai/dsh-mcp-client, ${NATIVE_MODE}. ` +
       `This gateway lists ${them} with \`disabled: true\`; clear that flag — adding ` +
       `${them} again would be a duplicate — or disable the native row if you do not need it.`
-    )
-  }
-  if (state === 'different-case') {
+  } else if (state === 'different-case') {
     // De-duplicated by spelling, and marked *per spelling*: `disabled` belongs to
     // the row, not to the sentence. A sentence-wide flag dropped the marker from a
     // switched-off row that sat beside a live one, and a trailing suffix after two
     // names read as applying to the last of them — both measured on a local
     // `Mine`(disabled) beside `Yours`(enabled) against native `mine` and `yours`.
     const named = new Map<string, boolean>()
-    for (const match of detail.near) {
+    for (const match of parts.near ?? []) {
       if (!named.has(match.name)) named.set(match.name, match.disabled)
     }
     const near = [...named]
       .map(([name, disabled]) => `\`${name}\`${disabled ? ' (switched off)' : ''}`)
       .join(' and ')
-    return (
+    body =
       `⚠ ${subject} ${verb} enabled in @deepseek-ai/dsh-mcp-client, ${NATIVE_MODE}. ` +
       `This gateway's list uses ${near}, differing only by case, so the names are ` +
       `separate namespaces rather than one entry. If these are all the same server, keep ` +
       `one row and delete the rest; if not, spell the difference out.`
-    )
+  } else {
+    body =
+      `⚠ ${subject} ${verb} enabled in @deepseek-ai/dsh-mcp-client, ${NATIVE_MODE}. ` +
+      `This gateway does not have ${them}; add ${them} here, or disable the native row if ` +
+      'you do not need it.'
   }
-  return (
-    `⚠ ${subject} ${verb} enabled in @deepseek-ai/dsh-mcp-client, ${NATIVE_MODE}. ` +
-    `This gateway does not have ${them}; add ${them} here, or disable the native row if ` +
-    'you do not need it.'
-  )
+  return body + promoteCaveat(parts.promoting ?? [], names.length)
 }
 
 /**
@@ -261,12 +290,16 @@ function renderUnmatchedNotice(count: number): string {
  * @param servers - Per-server status snapshots.
  * @param cachePath - Where the metadata cache lives.
  * @param nativeServers - A fixed list, or a getter read at render time.
+ * @param promotes - Whether this gateway would register a server natively itself,
+ *   which `directTools` decides. Defaults to "none", so a caller that does not know
+ *   gets no caveat rather than a guess.
  * @returns Text for the model.
  */
 function renderStatus(
   servers: readonly ServerStatus[],
   cachePath: string,
   nativeServers: NativeServersSource = [],
+  promotes: (serverName: string) => boolean = () => false,
 ): string {
   const reported = resolveNativeServers(nativeServers)
   // One name is one server: a duplicated loader entry is the same server, and the
@@ -318,6 +351,7 @@ function renderStatus(
   const listedDisabled: string[] = []
   const differentCase: string[] = []
   const caseNear: { name: string; disabled: boolean }[] = []
+  const casePromoting: string[] = []
   const absent: string[] = []
   for (const name of native) {
     if (enabledHere.has(name)) both.push(name)
@@ -328,22 +362,45 @@ function renderStatus(
       else {
         differentCase.push(name)
         caseNear.push(near)
+        // Asked about the *local* spelling, not the native name: the row the advice
+        // tells the reader to keep is the local one, and its setting is what decides
+        // whether keeping it leaves the schemas in place.
+        if (promotes(near.name)) casePromoting.push(name)
       }
     }
   }
-  const caseDetail: CaseDetail = { near: caseNear }
+  const caseParts: WarningParts = { near: caseNear }
+  // Which of a group this gateway would promote itself. Asked per sentence rather
+  // than once, because `directTools` is a per-server setting and a group can mix
+  // servers that opted in with servers that did not.
+  const promoting = (group: readonly string[]): string[] => group.filter(promotes)
   // Named unconditionally: these are the only lines here that describe a problem
   // with the *configuration* rather than with a server, and they silently cancel
   // the reason the plugin was installed.
   const conflict = [
-    ...(both.length === 0 ? [] : ['', renderNativeWarning(both, 'both')]),
+    ...(both.length === 0
+      ? []
+      : ['', renderNativeWarning(both, 'both', { promoting: promoting(both) })]),
     ...(listedDisabled.length === 0
       ? []
-      : ['', renderNativeWarning(listedDisabled, 'listed-disabled')]),
+      : [
+          '',
+          renderNativeWarning(listedDisabled, 'listed-disabled', {
+            promoting: promoting(listedDisabled),
+          }),
+        ]),
     ...(differentCase.length === 0
       ? []
-      : ['', renderNativeWarning(differentCase, 'different-case', caseDetail)]),
-    ...(absent.length === 0 ? [] : ['', renderNativeWarning(absent, 'absent')]),
+      : [
+          '',
+          renderNativeWarning(differentCase, 'different-case', {
+            ...caseParts,
+            promoting: casePromoting,
+          }),
+        ]),
+    ...(absent.length === 0
+      ? []
+      : ['', renderNativeWarning(absent, 'absent', { promoting: promoting(absent) })]),
     ...(unmatchedCount === 0 ? [] : ['', renderUnmatchedNotice(unmatchedCount)]),
   ]
 
@@ -716,7 +773,9 @@ async function executeProxy(
   if (args.instructions !== undefined) return handleInstructions(args, registry, outputGuard)
   if (args.connect !== undefined) return handleConnect(args, registry, signal)
   if (args.tool !== undefined) return handleCall(args, registry, signal, outputGuard)
-  return renderStatus(registry.status(), registry.cachePath, nativeServers)
+  return renderStatus(registry.status(), registry.cachePath, nativeServers, name =>
+    registry.promotesNatively(name),
+  )
 }
 
 /**

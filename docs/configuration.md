@@ -187,6 +187,13 @@ Setting `directTools: true` everywhere is what `@deepseek-ai/dsh-mcp-client` doe
 unconditionally, which removes the reason this plugin exists. It is here for the servers where
 a native tool is genuinely worth moving the prefix, not as a default worth reaching for.
 
+**`mcp({})` says so when it matters.** Every sentence the listing prints about a natively-served
+server asks the reader to keep that server in this gateway — add it, clear its `disabled`, keep one
+row — and promotion is the one setting that makes that insufficient. When it applies to a server
+the sentence names it (*"Keeping it here does not stop those schemas while `directTools` is set"*),
+and when a group mixes promoted with unpromoted servers it names only the promoted ones
+(`src/proxy-tool.ts`, `src/registry.ts`).
+
 **The consequence:** a promoted tool is a real tool in the request, so the tool-definition
 prefix changes and the prompt cache is invalidated from the first changed token
 (`src/schema.ts`, `src/index.ts`). `'search'` defers that change until the model goes looking

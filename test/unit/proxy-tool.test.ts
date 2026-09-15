@@ -509,6 +509,90 @@ describe('status', () => {
     assert.doesNotMatch(together, /Spell .* the same/)
   })
 
+  it('says when this gateway would promote the server itself', async () => {
+    // `directTools` registers tools natively *here*, so advice to keep the server
+    // in this gateway is not sufficient on its own and has to name that setting.
+    const caveat = /Keeping it here does not stop those schemas while `directTools` is set/
+
+    const both = await statusWith(
+      new McpGatewayRegistry(config([entry({ serverName: 'shared', directTools: true })])),
+      ['shared'],
+    )
+    assert.match(both, /Remove it from one of the two\./)
+    assert.match(both, caveat)
+
+    // The plugin-level default counts for a server that is not configured here at
+    // all, because arriving would inherit it.
+    const absent = await statusWith(
+      new McpGatewayRegistry({ idleTimeout: 10, servers: [], directTools: true }),
+      ['codegraph'],
+    )
+    assert.match(absent, caveat)
+
+    const disabled = await statusWith(
+      new McpGatewayRegistry(
+        config([entry({ serverName: 'off', disabled: true, directTools: true })]),
+      ),
+      ['off'],
+    )
+    assert.match(disabled, caveat)
+
+    // The different-case sentence tells the reader to keep the *local* row, so that
+    // row's setting is the one that decides -- the native spelling is not configured
+    // here, and asking about it would always answer no.
+    const caseOnly = await statusWith(
+      new McpGatewayRegistry(config([entry({ serverName: 'Mine', directTools: true })])),
+      ['mine'],
+    )
+    assert.match(caseOnly, caveat)
+  })
+
+  it('says nothing about promotion when nothing would be promoted', async () => {
+    const plain = await statusWith(
+      new McpGatewayRegistry(config([entry({ serverName: 'plain' })])),
+      ['plain'],
+    )
+    assert.doesNotMatch(plain, /directTools/)
+
+    // `'search'` stages tools until a search matches rather than registering them,
+    // so the caveat would overstate it.
+    const staged = await statusWith(
+      new McpGatewayRegistry({ idleTimeout: 10, servers: [], directTools: 'search' }),
+      ['codegraph'],
+    )
+    assert.doesNotMatch(staged, /directTools/)
+
+    // An empty name list promotes nothing.
+    const emptyList = await statusWith(
+      new McpGatewayRegistry(config([entry({ serverName: 'x', directTools: [] })])),
+      ['x'],
+    )
+    assert.doesNotMatch(emptyList, /directTools/)
+  })
+
+  it('names only the promoted servers when a group mixes them', async () => {
+    const mixed = await statusWith(
+      new McpGatewayRegistry(
+        config([entry({ serverName: 'a', directTools: true }), entry({ serverName: 'b' })]),
+      ),
+      ['a', 'b'],
+    )
+    assert.match(mixed, /Keeping `a` here does not stop those schemas/)
+    assert.doesNotMatch(mixed, /Keeping them here/)
+    assert.doesNotMatch(mixed, /Keeping `a` and `b` here/)
+
+    const all = await statusWith(
+      new McpGatewayRegistry(
+        config([
+          entry({ serverName: 'a', directTools: true }),
+          entry({ serverName: 'b', directTools: true }),
+        ]),
+      ),
+      ['a', 'b'],
+    )
+    assert.match(all, /Keeping them here does not stop those schemas/)
+  })
+
   it('counts every string it cannot match, not only the placeholder', async () => {
     // A blank name and an over-long one are just as unmatchable as a substituted
     // placeholder, and counting only the placeholder made the number disagree with
