@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`envFrom`: a server's secrets, fetched by a command when the server is spawned.** A `stdio`
+  entry may now declare a map of variable name → command; each command runs through `/bin/sh -c`
+  once per spawn, and its trimmed stdout becomes that variable in the child's environment
+  (`src/env-from.ts`, `src/connection.ts`). `args` may reference any declared name as `{{NAME}}`,
+  which is the only way to hand a secret to a server that accepts it only as an argument.
+
+  This complements the `!!js` tag rather than replacing it. `!!js` is evaluated once, while the
+  host loads its configuration, so a value rotated afterwards needs a host restart and a vault
+  that is still locked at boot yields an empty string for the life of the process. `envFrom` is
+  resolved at spawn time, which is late enough to see a rotated value and early enough to fail
+  loudly. Nothing is cached.
+
+  **A failure is never an empty value.** A non-zero exit, a timeout (10 s default,
+  `envFromTimeoutMs`), or empty output refuses to start the server instead of injecting a blank —
+  the failure mode that motivated this feature was a credential check passing on an empty key and
+  only failing when the model was actually called. `allowEmpty` names the variables for which an
+  empty result is genuinely correct.
+
+  **The value goes nowhere else.** Diagnostics carry the variable name, the exit code, and the
+  command's own stderr — never its stdout. The result is never written back to the entry, so it
+  never reaches `cache.json`; `computeConfigHash` hashes the commands and only when at least one
+  is declared, so an entry without `envFrom` keeps its existing digest and its cached catalog. The
+  command itself inherits the scrubbed ambient environment (`scrubbedParentEnv`), not the entry's
+  `env`, and runs in its own process group so a timeout's `SIGTERM` — escalated to `SIGKILL` a
+  second later — reaps whatever it started (`docs/configuration.md`).
+
+  Four new load-time refusals (`assertEnvFrom` in `src/index.ts`): a name declared in both `env`
+  and `envFrom`, an `envFrom` on a transport that never spawns, an empty command, and an
+  `allowEmpty` entry that names nothing.
+
+  The fixture server gained a `dump_argv` tool, because argument interpolation is only observable
+  in the child's `argv` (`test/fixtures/mcp-server.mjs`).
+
 ## [0.3.3] - 2026-09-15
 
 ### Fixed

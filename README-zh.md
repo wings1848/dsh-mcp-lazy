@@ -168,6 +168,8 @@ mcp({})                                # 状态：工具数 / 连接态 / 缓存
   （`(a|aa)+`）和多项式级回溯（`a*a*a*b`）。要完整分析就得加第二个运行时依赖。
 - **不支持 SSE 和 unix socket**。只有 `stdio` 和 `streamable-http`。
 - **不把 `npx` 解析成真实二进制**，所以用 `npx` 拉起的服务器会多一个 Node 父进程。
+- **密钥若经 `args` 传入，会出现在子进程的 `argv` 里**，`ps` 与 `/proc/<pid>/cmdline` 都能读到。
+  这条路只在服务器只能用参数收 token 时才需要；只用 `envFrom` 不会把值带进 `argv`。
 
 ## 开发
 

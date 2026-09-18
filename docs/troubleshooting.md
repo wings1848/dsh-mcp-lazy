@@ -59,6 +59,48 @@ The window is configurable: `failureBackoffMs` (number, milliseconds, minimum `0
 `60000`) sets how long a server that failed to start is left alone. `0` removes the wait
 entirely, so the next call retries at once (`src/index.ts`, `src/registry.ts`).
 
+## An `envFrom` command did not produce a value
+
+An `envFrom` failure is a *start* failure, so everything above applies — including the 60
+second backoff, which is the part that surprises people after they fix the credential. The
+message says which of the five things went wrong (`src/env-from.ts`):
+
+```
+envFrom: "TAVILY_API_KEY" failed (exit 78): pass: gpg: decryption failed: No secret key
+envFrom: "TAVILY_API_KEY" did not finish within 10000 ms and was killed — raise envFromTimeoutMs if the command legitimately takes longer
+envFrom: "TAVILY_API_KEY" produced no output — the command ran but printed nothing. List the name in allowEmpty if an empty value is genuinely correct.
+envFrom: "TAVILY_API_KEY" printed more than 65536 characters — too much for a value; make the command print only the secret
+envFrom: "TAVILY_API_KEY" produced a NUL byte, which no environment value may contain
+envFrom: "TAVILY_API_KEY" could not be run — could not start the command: …
+```
+
+Reading them:
+
+- **`failed (exit N)`** — the command's own failure, with up to 2 000 characters of its stderr
+  appended. That stderr is the command's, so it is where the real reason is — `No secret key`, a
+  wrong item name, a store that is not signed in — and it never contains the command's stdout,
+  which is deliberate (`src/env-from.ts`).
+- **a timeout** — the default budget is 10 s. The usual cause is a credential tool waiting for a
+  prompt that nobody can answer from a child process: `op`, `rbw` without its agent, and `pass`
+  with a locked GPG key all block rather than fail. Unlock or sign in to the store first, in
+  whatever way that store spells it, or raise `envFromTimeoutMs`. Putting that store's own status
+  check in front of the read turns the hang into an instant, readable failure — for example
+  `rbw unlocked || { echo 'rbw is locked; run rbw unlock' >&2; exit 1; }; rbw get NAME`, or
+  `gpg --list-secret-keys >/dev/null || exit 1` in front of `pass`.
+- **no output** — the command ran and printed nothing. Usually an empty entry in the store or a
+  command that writes to stderr only. `allowEmpty: ["NAME"]` is the explicit way to accept
+  an empty value for that one name.
+- **more than 65 536 characters** — the command printed something that is not a secret (a banner, a
+  whole file). Values are refused rather than truncated, so a cut-short secret can never
+  reach the server.
+- **a NUL byte** — the command emitted binary data.
+
+The value itself never appears in any of these messages, so pasting one into a bug report is
+safe. Two related facts worth knowing: the command runs in the plugin host's working
+directory, not the entry's `cwd`, and it inherits the scrubbed ambient environment rather than
+the entry's `env` — a tool that reads its session from the environment has to be given it
+inside the command (`docs/configuration.md`, `src/env-from.ts`).
+
 ## Where the stdio child's stderr goes
 
 By default it is piped and captured, because the SDK's own default (`inherit`) hands the

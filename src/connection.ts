@@ -27,6 +27,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import { z } from 'zod'
+import { interpolateArgs, resolveEnvFrom } from './env-from.js'
 import type { GatewayConnection, LiveToolCatalog } from './registry.js'
 import { DEFAULT_TOOL_CALL_TIMEOUT_MS } from './schema.js'
 import type { ProjectedBlock, ServerEntry, ToolCallResult, ToolMetadata } from './types.js'
@@ -393,7 +394,7 @@ export class LazyConnections implements GatewayConnection {
         this.#recordError(entry.serverName, error)
       }
     })
-    const { transport, stderr } = this.#createTransport(entry)
+    const { transport, stderr } = await this.#createTransport(entry)
     try {
       await client.connect(transport)
     } catch (error) {
@@ -413,10 +414,22 @@ export class LazyConnections implements GatewayConnection {
    * @param entry - The server entry.
    * @returns The transport plus the child's captured stderr tail.
    */
-  #createTransport(entry: ServerEntry): { transport: Transport; stderr: StderrTail } {
+  async #createTransport(
+    entry: ServerEntry,
+  ): Promise<{ transport: Transport; stderr: StderrTail }> {
     const stderr = new StderrTail()
     if (entry.transport === 'stdio') {
       const debug = entry.debug === true
+      // Resolved here, into this scope, and nowhere else. The value exists for
+      // the length of one spawn: it is never written back to the entry, never
+      // cached, and never put in a message — which is what keeps it out of
+      // `cache.json` and out of anything the model can read.
+      //
+      // Deliberately not given the caller's abort signal. A single `connect()`
+      // attempt is shared by every caller waiting on it, so letting one
+      // caller's cancellation kill the lookup would fail the others and open a
+      // retry-backoff window over a decision that caller made on purpose.
+      const resolvedFrom = await resolveEnvFrom(entry)
       const params: {
         command: string
         args: string[]
@@ -425,8 +438,11 @@ export class LazyConnections implements GatewayConnection {
         stderr: 'pipe' | 'inherit'
       } = {
         command: entry.command ?? '',
-        args: entry.args ?? [],
-        env: { ...scrubbedParentEnv(), ...(entry.env ?? {}) },
+        args: interpolateArgs(entry.args ?? [], resolvedFrom),
+        // Resolved values merge last: they are the ones the configuration asked
+        // for at spawn time, and a name cannot appear in two of the three maps
+        // (`assertEnvFrom` refuses the overlap at load).
+        env: { ...scrubbedParentEnv(), ...(entry.env ?? {}), ...resolvedFrom },
         // The SDK defaults to `inherit`, which hands the stream to the host and
         // leaves `transport.stderr` null — no diagnostic is possible. Piping it
         // is what makes a startup failure explainable; `debug` buys the old

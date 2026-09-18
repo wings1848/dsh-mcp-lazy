@@ -46,13 +46,15 @@ independently audited, and nothing here is a guarantee.
 
 ### Configuration is trusted input
 
-For `stdio` servers, `command`, `args`, `env`, and `cwd` come straight from the
-plugin configuration (`src/index.ts` config schema, `src/connection.ts`
-`#createTransport`). The child is spawned with those values. Configuring a
-malicious `command` is exactly equivalent to running that command yourself, and
-the plugin cannot tell the difference. Configuration validation at load only
-rejects entries that cannot work at all: a duplicate `serverName`, `stdio`
-without `command`, or `streamable-http` without `url` (`src/index.ts`).
+For `stdio` servers, `command`, `args`, `env`, `envFrom`, and `cwd` come straight
+from the plugin configuration (`src/index.ts` config schema, `src/connection.ts`
+`#createTransport`, `src/env-from.ts`). The child is spawned with those values.
+Configuring a malicious `command` — or an `envFrom` command that does something
+other than print a secret — is exactly equivalent to running that command
+yourself, and the plugin cannot tell the difference. Configuration validation at
+load only rejects entries that cannot work at all: a duplicate `serverName`,
+`stdio` without `command`, `streamable-http` without `url`, and four `envFrom`
+mistakes (`src/index.ts` `assertEnvFrom`).
 
 The model does not get to choose the command. The proxy tool's parameters are
 `search`, `describe`, `tool`, `args`, `server`, `connect`, `instructions`,
@@ -88,10 +90,28 @@ harness does.
 
 The entry's explicit `env` is merged on top of the scrub
 (`src/connection.ts`), so a value you configure deliberately does survive — that
-is the intended escape hatch, and it is the only way a credential reaches a
-server. A server that needs `GITHUB_TOKEN` will not start unless you put it in
-`env`; that is a migration trap when coming from plugins that inherit the whole
-environment, not a bug.
+is the intended escape hatch. `envFrom` is the other one: each declared name is
+resolved by running its command at spawn time, and the result is merged on top of
+both the scrub and `env`. A server that needs `GITHUB_TOKEN` will not start unless
+you put it in `env` or resolve it through `envFrom`; that is a migration trap when
+coming from plugins that inherit the whole environment, not a bug.
+
+What `envFrom` adds to the trust model, and what it does not:
+
+- **The commands are configuration, so they are trusted input** in exactly the
+  sense above. They run through `/bin/sh -c` with the harness's privileges and the
+  scrubbed environment — not the entry's `env`, so a command cannot read a
+  credential that only the entry was given (`src/env-from.ts`).
+- **Values do not go anywhere else.** The result is never written back to the
+  entry, so it is absent from `cache.json`, from logs, and from the host's own
+  environment; a diagnostic carries the variable name, the exit code, and up to
+  2 000 characters of the command's stderr — never its stdout
+  (`src/env-from.ts`, `src/connection.ts`).
+- **A failure refuses to start the server** rather than injecting an empty value,
+  which is the point of the feature (`src/env-from.ts`).
+- **A value interpolated into `args` is visible to `ps`** and in
+  `/proc/<pid>/cmdline` on the same machine. That is a property of the child's
+  `argv`, not of this plugin; `envFrom` alone keeps the value out of it.
 
 This scrub is a boundary against accidental leakage of ambient credentials, not
 against the model: the model cannot edit configuration.
@@ -162,15 +182,22 @@ The plugin writes in exactly two places (`src/metadata-cache.ts`,
 
 - `$DSH_HOME/storages/mcp-lazy/cache.json` (or `~/.dsh/...` when `DSH_HOME` is
   unset) holds tool names, descriptions, schemas, and server instructions, plus a
-  SHA-256 digest of the transport configuration. The digest covers `env` and
-  `headers`, but their values are not stored. The file is written atomically
-  (temporary file plus rename) with no explicit mode, so it follows your process
-  umask — unlike the spill files;
+  SHA-256 digest of the transport configuration. The digest covers `env`,
+  `headers`, and any `envFrom` commands — the commands, never their results, and
+  the field is left out of the digest entirely when nothing is declared, so an
+  entry that does not use it keeps its existing digest. The values are not stored.
+  The file is written atomically (temporary file plus rename) with no explicit
+  mode, so it follows your process umask — unlike the spill files;
 - the spill files described above.
 
 The plugin opens no listening socket and makes no network requests other than to
-the MCP servers you configure; its only `node:` imports are `crypto`, `fs`,
-`fs/promises`, `os`, and `path`.
+the MCP servers you configure. Its only `node:` imports are `child_process`,
+`crypto`, `fs`, `fs/promises`, `os`, `path`, and `url`
+(`rg -oN "from 'node:[^']+'" src/ | sort -u`).
+
+`child_process` is what runs an `envFrom` command and the MCP server itself; a
+command you configure is free to reach the network, exactly as a server's own
+`command` is.
 
 ### Scope note
 

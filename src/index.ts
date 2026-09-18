@@ -13,6 +13,7 @@ import z from '@deepseek-ai/schemastery'
 import { registerAdoptCommand } from './command.js'
 import { LazyConnections } from './connection.js'
 import { DirectToolRegistrar } from './direct-tools.js'
+import { DEFAULT_ENV_FROM_TIMEOUT_MS } from './env-from.js'
 import { qualifiedToolName } from './naming.js'
 import { OutputGuard } from './output-guard.js'
 import { createProxyTool } from './proxy-tool.js'
@@ -52,6 +53,9 @@ export const KNOWN_SERVER_FIELDS: ReadonlySet<string> = new Set([
   'command',
   'args',
   'env',
+  'envFrom',
+  'allowEmpty',
+  'envFromTimeoutMs',
   'cwd',
   'url',
   'headers',
@@ -108,6 +112,9 @@ const ServerSchema = z.object({  serverName: z.string().required().pattern(SERVE
   command: z.string(),
   args: z.array(String).default([]),
   env: z.dict(String).default({}),
+  envFrom: z.dict(String).default({}),
+  allowEmpty: z.array(String).default([]),
+  envFromTimeoutMs: z.natural().default(DEFAULT_ENV_FROM_TIMEOUT_MS),
   cwd: z.string(),
   url: z.string(),
   headers: z.dict(String).default({}),
@@ -327,6 +334,53 @@ function assertServerConfig(servers: ConfigShape['servers'] | undefined): void {
     if (entry.transport === 'streamable-http' && (entry.url === undefined || entry.url === '')) {
       throw new Error(
         `mcp-lazy: server "${entry.serverName}" uses transport streamable-http but has no url`,
+      )
+    }
+
+    assertEnvFrom(entry)
+  }
+}
+
+/**
+ * Reject `envFrom` declarations that cannot mean what they say.
+ *
+ * All four are configuration mistakes with silent or delayed consequences:
+ * a name in both `env` and `envFrom` would be resolved twice and only one of
+ * them would win, an `envFrom` on a transport that never spawns would simply
+ * never run, and an `allowEmpty` entry that names nothing looks like a
+ * permission that is not one.
+ *
+ * @param entry - One configured server entry.
+ */
+function assertEnvFrom(entry: ConfigShape['servers'][number]): void {
+  const declared = Object.keys(entry.envFrom ?? {})
+
+  if (entry.transport !== 'stdio' && declared.length > 0) {
+    throw new Error(
+      `mcp-lazy: server "${entry.serverName}" sets envFrom on transport ${entry.transport}, ` +
+        'which never spawns a process — envFrom only applies to stdio servers',
+    )
+  }
+
+  for (const name of declared) {
+    if (Object.hasOwn(entry.env ?? {}, name)) {
+      throw new Error(
+        `mcp-lazy: server "${entry.serverName}" resolves "${name}" from both env and envFrom — ` +
+          'keep one: env for a literal, envFrom for a command',
+      )
+    }
+    if ((entry.envFrom ?? {})[name] === '') {
+      throw new Error(
+        `mcp-lazy: server "${entry.serverName}" gives envFrom "${name}" an empty command`,
+      )
+    }
+  }
+
+  for (const name of entry.allowEmpty ?? []) {
+    if (!declared.includes(name)) {
+      throw new Error(
+        `mcp-lazy: server "${entry.serverName}" lists "${name}" in allowEmpty, but envFrom ` +
+          'does not declare it — allowEmpty only names envFrom variables',
       )
     }
   }

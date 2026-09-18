@@ -76,6 +76,23 @@ export interface ServerEntry {
   args?: string[]
   /** Extra env merged over the scrubbed ambient environment. */
   env?: Record<string, string>
+  /**
+   * Extra env whose values come from a command, keyed by variable name.
+   *
+   * Each command runs through `/bin/sh -c` once per spawn — the moment the
+   * server is started, not the moment the host loaded its configuration — and
+   * its trimmed stdout becomes the value. A command that fails, times out, or
+   * prints nothing refuses to start the server rather than injecting a blank
+   * value; list the name in {@link allowEmpty} to accept a blank one.
+   *
+   * Declared names are also substituted into `args` as `{{NAME}}`, which is the
+   * only way to hand a secret to a server that takes it as an argument.
+   */
+  envFrom?: Record<string, string>
+  /** Names in `envFrom` whose empty result is accepted instead of refused. */
+  allowEmpty?: string[]
+  /** Budget per `envFrom` command, in milliseconds. Defaults to 10 s. */
+  envFromTimeoutMs?: number
   /** Working directory for the child process. */
   cwd?: string
 

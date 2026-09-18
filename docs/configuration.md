@@ -54,8 +54,11 @@ top-level YAML array of loader patch entries; `id` is the row the patch layer ta
 | `serverName` | string | required | Namespace for this server; must match `^[A-Za-z0-9_-]{1,32}$` and be unique in the list (`src/index.ts`, `src/types.ts`). |
 | `transport` | `stdio` \| `streamable-http` | required | How the server is reached (`src/index.ts`). |
 | `command` | string | — | stdio only: executable to spawn. Required for `stdio` (`src/index.ts`, `src/connection.ts`). |
-| `args` | string[] | `[]` | stdio only: arguments passed to the child verbatim, with no shell interpolation (`src/index.ts`, `src/types.ts`). |
+| `args` | string[] | `[]` | stdio only: arguments passed to the child verbatim, with no shell interpolation. `{{NAME}}` placeholders for names declared in `envFrom` are substituted first (`src/connection.ts`, `src/env-from.ts`). |
 | `env` | map of string → string | `{}` | stdio only: merged over the scrubbed ambient environment; explicit values win (`src/connection.ts`). |
+| `envFrom` | map of string → string (command) | `{}` | stdio only: values fetched by running a command when the server is spawned; see [Secrets](#secrets) (`src/env-from.ts`). |
+| `allowEmpty` | string[] | `[]` | Names in `envFrom` whose empty result is accepted instead of refused (`src/env-from.ts`). |
+| `envFromTimeoutMs` | integer ≥ 0 | `10000` | Budget per `envFrom` command, in milliseconds. `0` is accepted by the schema and means every lookup times out immediately (`src/env-from.ts`). |
 | `cwd` | string | — | stdio only: working directory for the child; an empty string is ignored (`src/connection.ts`). |
 | `url` | string | — | `streamable-http` only: the MCP endpoint. Required for `streamable-http` (`src/index.ts`, `src/connection.ts`). |
 | `headers` | map of string → string | `{}` | `streamable-http` only: extra request headers; omitted entirely when empty (`src/connection.ts`). |
@@ -71,7 +74,10 @@ top-level YAML array of loader patch entries; `id` is the row the patch layer ta
 A duplicate `serverName`, a `stdio` entry with no `command`, and a `streamable-http` entry
 with no `url` throw at load (`src/index.ts`). So does any field name the plugin does not know —
 including a `dsh-mcp-client` field carried over by mistake — because a setting that is accepted
-and then ignored is indistinguishable from one that works.
+and then ignored is indistinguishable from one that works. `envFrom` adds four more load-time
+refusals (`assertEnvFrom` in `src/index.ts`): a name declared in both `env` and `envFrom`, an
+`envFrom` on a transport that never spawns a process, an empty command, and an `allowEmpty`
+entry that names nothing.
 
 ## Secrets
 
@@ -111,13 +117,112 @@ loader rather than inferred:
 `--dump-config` prints the expression verbatim rather than its value — it composes the tree, it
 does not apply it. To see what an expression resolves to, start the profile.
 
+### Fetching a secret when the server starts: `envFrom`
+
+`!!js` is evaluated when the entry is applied — once, while the host is loading its configuration.
+A value rotated afterwards needs a host restart, and a vault that is still locked at boot resolves
+to an empty string that stays wrong for the life of the process. `envFrom` runs its command when
+the *server is spawned* instead, which is both late enough to see a rotated value and early enough
+to fail loudly:
+
+```yaml
+servers:
+  - serverName: search
+    transport: stdio
+    command: npx
+    args: ["-y", "tavily-mcp@0.2.5"]
+    envFrom:
+      TAVILY_API_KEY: pass show tavily/api-key
+```
+
+**Any command that prints the secret to stdout works.** There is no adapter, no vendor-specific
+code and no provider setting — the plugin only runs a shell command
+(`envFrom` is provider-agnostic by design, so the tests exercise one mechanism rather than one per
+tool). The same field, spelled for a few common stores — check your tool's own documentation for
+the exact flags, these are illustrations rather than a tested contract:
+
+| Store | Command |
+| --- | --- |
+| `pass` | `pass show tavily/api-key` |
+| 1Password CLI | `op read op://Private/TAVILY/credential` |
+| Bitwarden (`rbw`) | `rbw get TAVILY_API_KEY` |
+| Bitwarden (official CLI) | `bw get password TAVILY_API_KEY` |
+| SOPS-encrypted file | `sops -d secrets.yaml \| yq -r '.tavily'` |
+| HashiCorp Vault | `vault kv get -field=key secret/tavily` |
+| AWS/GCP/Azure secret manager | `aws secretsmanager get-secret-value --secret-id tavily --query SecretString --output text` |
+| KeePassXC | `keepassxc-cli show -s -a password vault.kdbx tavily` |
+
+A locked store is a different failure from a missing command: many credential tools *wait for a
+prompt* rather than fail, which reaches the timeout instead of saying what is wrong. See
+[troubleshooting](troubleshooting.md#an-envfrom-command-did-not-produce-a-value) for the readable
+way to fail — a store's own status check in front of the read is the usual fix.
+
+The rules, all enforced in `src/env-from.ts`:
+
+- **The command runs through `/bin/sh -c`**, so pipes and redirection work
+  (`sops -d secrets.yaml | yq -r '.token'` is a supported spelling). Its trimmed stdout is the
+  value — leading and trailing whitespace only, because a secret may contain anything else.
+- **Nothing is cached.** Every spawn runs every command again, which is exactly why rotation takes
+  effect on the next call with no restart; a lookup costs tens of milliseconds per spawn.
+- **A failure is never an empty value.** A non-zero exit, a timeout, or empty output refuses to
+  start the server rather than injecting a blank. List a name in `allowEmpty` when an empty value
+  is genuinely correct.
+- **Diagnostics never carry the value.** An error names the variable, the exit code, and the
+  command's own stderr — never its stdout, and the stderr it quotes is capped at 2 000
+  characters. Keep
+  secrets out of the stderr of a command you write here: that text can reach the model. Output
+  that overflows the 65 536-character stdout cap is refused rather than truncated, so a
+  cut-short secret never reaches the server.
+- **The command gets the scrubbed ambient environment** — the same baseline the MCP child gets,
+  and deliberately *not* this entry's `env`. A tool that reads its session from the environment
+  (`BW_SESSION`, `OP_SERVICE_ACCOUNT_TOKEN`) has to be given it inside the command itself.
+- **Commands run in their own process group**, and a timeout sends `SIGTERM` followed by `SIGKILL`
+  a second later, so a command that ignores the polite signal is still reaped along with anything
+  it started. `envFromTimeoutMs` sets the budget (10 s by default).
+- **Every declared name resolves in parallel**, and the start waits for all of them: a failure
+  returns only once no command is still running.
+
+A server that only accepts its token as an argument cannot be given one through `env`. Declare the
+name in `envFrom` and put `{{NAME}}` in `args`, and the placeholder is replaced at spawn:
+
+```yaml
+    args: ['-y', 'chrome-devtools-mcp@1.9.0', '--wsHeaders={"Authorization":"Bearer {{CF_TOKEN}}"}']
+    envFrom:
+      CF_TOKEN: op read op://Private/CF_BROWSER/credential
+```
+
+A placeholder whose name `envFrom` does not declare is left exactly as written — `{{` is legal
+inside a JSON or template argument, and refusing to start over one would break configurations that
+have nothing to do with secrets. Note that this route puts the secret in the child's `argv`, where
+`ps` and `/proc/<pid>/cmdline` can read it; prefer `envFrom` alone whenever the server accepts an
+environment variable.
+
+- **The command runs in the plugin host's working directory**, not the entry's `cwd`, even though
+  the server it belongs to starts in that `cwd`. Use an absolute path, or `cd` inside the command.
+- **Resolved values merge last**, so a declared name also overrides one that the scrubbed ambient
+  environment provided — that is what makes a literal `PATH`-shaped mistake visible, but it also
+  means declaring a name like `PATH` or `HOME` will break the child rather than being overridden.
+- **`{{NAME}}` matches any declared name**, not just POSIX identifiers, so `{{api-key}}` resolves
+  when `api-key` is declared. An undeclared placeholder is left exactly as written — a `{{` that
+  is part of a JSON or template argument is not an error.
+
+Resolved values are never written back to the server entry, so they never reach `cache.json`
+(`src/metadata-cache.ts` hashes the commands, not their results) and never enter the host's own
+environment (`src/connection.ts` builds them into the child's environment only).
+
+A failed lookup is a failed start, so it also opens the plugin's retry-backoff window
+(`failureBackoffMs`, 60 s by default): unlocking the vault and calling the tool again may be
+refused until the window passes, while `mcp({ connect: "<server>" })` retries immediately. That is
+deliberate — a server that just failed should not be re-spawned on every call that mentions one of
+its tools — but it is worth knowing before concluding that a fixed credential did not take effect.
+
 ## Transports
 
 `stdio` spawns a child from `command` and `args`, with `cwd` when set, and an environment of
 scrubbed ambient names — `KEY|PASSWORD|SECRET|TOKEN` and every `DSH_*` name are dropped
 (`scrubbedParentEnv`, `@deepseek-ai/dsh-subprocess`, used in `src/connection.ts`) — plus the
-entry's own `env`, so an explicit value wins. `streamable-http` connects to `url`, sending
-`headers` when any are set (`src/connection.ts`).
+entry's own `env`, plus anything `envFrom` resolved last, so an explicit value wins.
+`streamable-http` connects to `url`, sending `headers` when any are set (`src/connection.ts`).
 
 ## Lifecycle and idle reaping
 

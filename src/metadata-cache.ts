@@ -211,6 +211,7 @@ function canonicalJson(value: unknown): string {
  * @returns A stable hex digest.
  */
 export function computeConfigHash(entry: ServerEntry): string {
+  const envFrom = entry.envFrom ?? {}
   const transportPart = {
     transport: entry.transport,
     command: entry.command ?? null,
@@ -219,6 +220,12 @@ export function computeConfigHash(entry: ServerEntry): string {
     cwd: entry.cwd ?? null,
     url: entry.url ?? null,
     headers: entry.headers ?? {},
+    // The commands are hashed; their *results* never are, and never exist
+    // anywhere near this file. Only the declared commands are part of the key,
+    // and only when there are some: schemastery defaults `envFrom` to `{}` on
+    // every entry, so hashing the empty map would change every existing entry's
+    // digest and throw away every cached catalog for nothing.
+    ...(Object.keys(envFrom).length === 0 ? {} : { envFrom }),
   }
   return createHash('sha256').update(canonicalJson(transportPart)).digest('hex')
 }

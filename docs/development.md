@@ -55,6 +55,60 @@ pnpm install --frozen-lockfile && pnpm run check && pnpm test
 node --test --test-name-pattern='M9' "test/unit/connection.e2e.test.ts"
 ```
 
+## Loading the local build into a dsh profile
+
+`link-dsh` only symlinks the `@deepseek-ai/*` peers **into this checkout**, so the plugin's own
+imports resolve to the harness instance. It does not install the plugin into DSH. A profile gets
+the plugin from its own `node_modules`:
+
+```
+$DSH_HOME/profiles/<profile>/node_modules/dsh-mcp-lazy/
+```
+
+That copy is a **snapshot**. Rebuilding here changes nothing in a running DSH: the loader imports
+the plugin once, at boot. Two consequences:
+
+- **Point the profile at this checkout** while developing:
+
+  ```bash
+  P=~/.dsh/profiles/web/node_modules/dsh-mcp-lazy
+  mv "$P" "$P.bak-$(date +%Y%m%d-%H%M%S)"     # keep the installed copy for rollback
+  ln -s "$PWD" "$P"                            # the profile now runs the working tree
+  ```
+
+  Rollback is `rm` the symlink and `mv` the backup back, or reinstall with
+  `dsh plugin --profile web add dsh-mcp-lazy`.
+
+- **Restart dsh-web to pick up a new build** (`systemctl --user restart dsh-web`). Module HMR is
+  off — `dsh-base`'s `hmr` entry ships `config.root: []`, so only the profile *configuration* may
+  reload — and swapping the module directory out from under a running host **removes the tool it
+  registered**: the plugin's `mcp` tool then answers `unknown tool "mcp"` until the next restart.
+  Do not replace the directory while a host is serving.
+
+A symlinked checkout also means `rm -rf lib` (which the clean-environment reproduction above does)
+briefly leaves the profile pointing at a plugin with no build output. A running host is unaffected
+— it already imported what it needs — but a restart in that window would fail. Rebuild first.
+
+To verify an installed copy without touching the live host, boot a throwaway profile whose
+`node_modules/dsh-mcp-lazy` points at the install, with `DSH_HOME` in a temp directory:
+
+```bash
+export DSH_HOME=$(mktemp -d)
+mkdir -p "$DSH_HOME/profiles/probe/node_modules"
+ln -s ~/.dsh/profiles/web/node_modules/@deepseek-ai "$DSH_HOME/profiles/probe/node_modules/@deepseek-ai"
+ln -s ~/.dsh/profiles/web/node_modules/dsh-mcp-lazy "$DSH_HOME/profiles/probe/node_modules/dsh-mcp-lazy"
+cat > "$DSH_HOME/profiles/probe/package.json" <<'JSON'
+{ "name": "dsh-profile-probe", "private": true, "dependencies": {},
+  "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "dsh-mcp-lazy", "@deepseek-ai/dsh-headless"] } } }
+JSON
+dsh --profile probe --patch ./probe-servers.yml headless </dev/null   # stops on missing credentials
+```
+
+A plugin-load failure prints `plugin tree failed to load: … mcp-lazy: …` on stderr; a boot that
+gets past the plugin and stops on `MISSING_CREDENTIAL` means the configuration was accepted.
+`--dump-config` is **not** a substitute — it composes the tree without applying it, so it accepts
+configuration the plugin would reject.
+
 ## Why `link-dsh` is mandatory
 
 `@deepseek-ai/cordis`, `dsh-tools`, `dsh-subprocess`, and `schemastery` are **peer

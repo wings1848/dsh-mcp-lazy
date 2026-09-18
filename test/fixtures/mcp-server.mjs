@@ -114,6 +114,16 @@ server.registerTool(
 )
 
 server.registerTool(
+  'dump_argv',
+  {
+    description: 'Report this process argv, one entry per line.',
+  },
+  async () => ({
+    content: [{ type: 'text', text: process.argv.join('\n') }],
+  }),
+)
+
+server.registerTool(
   'always_fails',
   { description: 'Always return an MCP error result.' },
   async () => ({ content: [{ type: 'text', text: 'this tool always fails' }], isError: true }),

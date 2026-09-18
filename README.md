@@ -191,6 +191,9 @@ The v1 boundary, stated plainly:
 - **No SSE or unix-socket transports.** `stdio` and `streamable-http` only.
 - **`npx` is not resolved to the underlying binary**, so an `npx`-launched server costs one
   extra Node parent process.
+- **A secret passed through `args` lands in the child's `argv`**, where `ps` and
+  `/proc/<pid>/cmdline` can read it. That path exists only because some servers accept a token
+  no other way; `envFrom` alone keeps the value out of `argv`.
 
 ## Development
 
