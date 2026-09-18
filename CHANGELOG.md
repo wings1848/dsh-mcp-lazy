@@ -42,6 +42,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The fixture server gained a `dump_argv` tool, because argument interpolation is only observable
   in the child's `argv` (`test/fixtures/mcp-server.mjs`).
 
+### Changed
+
+- **The design notes are two files instead of four.** `docs/design/plan.md`,
+  `docs/design/adopt-native-rows.md`, and `docs/design/mcp-adopt-command.md` are merged into
+  `docs/design.md` (the constant tool surface, the cache, the lifecycle, `envFrom`, and the `adopt`
+  command, each with its invariants, boundary semantics, and known limits); the parity report moves
+  to `docs/parity-pi-mcp-adapter.md`. Every reference — README, README-zh, CONTRIBUTING, SECURITY,
+  troubleshooting, the module doc comments in `src/`, and the older changelog entries above — points
+  at the new paths. Documentation only: no code, no exported surface, no published entry point
+  changed.
+
+### Fixed
+
+- The test counts quoted in `README.md`, `README-zh.md`, and `CONTRIBUTING.md` now match the suite
+  (388 tests in 90 suites) instead of trailing it.
+
 ## [0.3.3] - 2026-09-15
 
 ### Fixed
@@ -323,7 +339,7 @@ declared rather than quietly dropped.
   "nothing to do", which is the one failure this command must never have.
 - Three ways `adopt` could damage or silently skip a configuration, found by an adversarial review
   before release. Each is covered by a test that fails without its fix, and the fixes are described
-  in `docs/design/adopt-native-rows.md` §12:
+  in `docs/design.md` §3.3–3.5:
   - `disabled: true` could be inserted *inside* a nested block — a block scalar or an `env:` map
     holding a `name:` of its own — producing a file the loader cannot parse, after reporting
     success. The flag now goes on the row's own key column.
@@ -409,7 +425,7 @@ peer dependencies supplied by the DSH host (`package.json`).
   tokens. That figure is constant no matter how many servers are configured.
   Measured against `chrome-devtools-mcp@1.6.0` (29 tools), native registration
   would cost 21252 bytes ≈ 5313 tokens per request, so this is 92.8% less
-  (`docs/design/plan.md`, `README.md`).
+  (`docs/design.md`, `README.md`).
 - Lazy connections: a server is spawned on first use and reaped once it has been
   idle past its window (default 10 minutes; `0` disables reaping). Concurrent
   first calls share one in-flight connection instead of racing, a call in flight
@@ -469,10 +485,10 @@ peer dependencies supplied by the DSH host (`package.json`).
 - 179 automated tests in 47 suites, including real child-process tests for lazy
   startup, process reuse, idle reaping, cancellation, timeouts, crash recovery,
   and live tool-list refresh (`README.md`,
-  `docs/design/parity-pi-mcp-adapter.md`).
-- Documentation: `README.md`, `README-zh.md`, `docs/design/plan.md` (acceptance
-  criteria AC1–AC18), and `docs/design/parity-pi-mcp-adapter.md` (a module-by-module
-  audit against `pi-mcp-adapter` v2.33.0).
+  `docs/parity-pi-mcp-adapter.md`).
+- Documentation: `README.md`, `README-zh.md`, `docs/design.md`, and
+  `docs/parity-pi-mcp-adapter.md` (a module-by-module
+  comparison against `pi-mcp-adapter` v2.33.0).
 - Not in this release, by design: OAuth and bearer-token storage, MCP resources
   and prompts, sampling and elicitation, forwarding image payloads, shared
   processes, and configuration interoperability with other hosts. The boundaries
@@ -481,7 +497,7 @@ peer dependencies supplied by the DSH host (`package.json`).
 ### Fixed
 
 Defects found during development — by the parity audit in
-`docs/design/parity-pi-mcp-adapter.md`, by mounting the plugin in a real harness,
+`docs/parity-pi-mcp-adapter.md`, by mounting the plugin in a real harness,
 by an independent review before this release, and by tests that were observed to
 fail first — and fixed before this release:
 
@@ -593,7 +609,7 @@ fail first — and fixed before this release:
 - The design notes claimed oversized tool output was handled by an existing
   framework spill. The harness has no framework-level truncation of tool output,
   so this release implements the output guard instead
-  (`docs/design/parity-pi-mcp-adapter.md`).
+  (`docs/parity-pi-mcp-adapter.md`).
 
 ### Security
 

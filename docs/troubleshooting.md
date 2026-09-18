@@ -165,8 +165,8 @@ cache, because an unknown name triggers discovery over the servers that have no 
 
 **Why there is no automatic warm-up.** Every server defaults to `lazy`, and activation
 contacts no server and spawns no child process for it (`src/index.ts`). Zero processes at
-load is the property the plugin exists for, and the acceptance criteria require it (AC1 in
-`docs/design/plan.md`); pre-warming every configured server would spend exactly what the
+load is the property the plugin exists for, and it is an invariant with a test behind it
+(`docs/design.md` §5, I2); pre-warming every configured server would spend exactly what the
 plugin is meant to save. The deliberate exception is a server configured `eager` or
 `keep-alive`: those are connected during activation, which is how their caches stay warm
 without a `connect` call (`src/registry.ts`, `src/index.ts`).

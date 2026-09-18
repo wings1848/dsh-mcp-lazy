@@ -150,10 +150,8 @@ mcp({})                                # 状态：工具数 / 连接态 / 缓存
 | [docs/configuration.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/configuration.md) | 每个字段、四种生命周期、输出上限 |
 | [docs/troubleshooting.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/troubleshooting.md) | 启动失败、冷缓存、名字解析 |
 | [docs/development.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/development.md) | 构建、测试、为什么 `link-dsh` 是必须的 |
-| [docs/design/plan.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/plan.md) | 实现计划与验收标准 |
-| [docs/design/adopt-native-rows.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/adopt-native-rows.md) | `adopt` 命令：设计、不变量、验收标准，以及实施时才发现的事 |
-| [docs/design/mcp-adopt-command.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/mcp-adopt-command.md) | `/mcp-adopt` slash 命令，以及改动了它的那轮对抗性评审 |
-| [docs/design/parity-pi-mcp-adapter.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/parity-pi-mcp-adapter.md) | 与 `pi-mcp-adapter` v2.33.0 的逐模块审计 |
+| [docs/design.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design.md) | 为什么是这个形状：恒定工具面、缓存、生命周期、`envFrom`、`adopt` 命令 |
+| [docs/parity-pi-mcp-adapter.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/parity-pi-mcp-adapter.md) | 与 `pi-mcp-adapter` v2.33.0 的逐模块对照，以及查出来的缺陷 |
 
 > 详细文档目前只有英文版。这份中文 README 是入口页。
 
@@ -175,7 +173,7 @@ mcp({})                                # 状态：工具数 / 连接态 / 缓存
 
 ```bash
 pnpm install
-pnpm test          # 构建 → 重链 peer 包 → 354 个用例
+pnpm test          # 构建 → 重链 peer 包 → 388 个用例
 pnpm run check     # typecheck → lint → build → 再对测试源码做类型检查
 ```
 

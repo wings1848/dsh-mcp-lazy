@@ -3,7 +3,8 @@
  *
  * Registers exactly one model-facing tool (`mcp`) for every configured MCP
  * server, discovers tool metadata into a disk cache, and starts a server only
- * when a tool call actually needs it. See `docs/design/plan.md` for the acceptance criteria.
+ * when a tool call actually needs it. See `docs/design.md` for the invariants
+ * this shape is built to hold.
  *
  * @module dsh-mcp-lazy
  */

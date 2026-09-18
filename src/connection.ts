@@ -181,8 +181,8 @@ function readProperty(value: unknown, key: string): unknown {
  *
  * Images and audio are reported as metadata rather than inlined: this plugin's
  * tool output is text, and silently dropping a payload would be worse than
- * saying what arrived and how big it was. Durable image forwarding is tracked in
- * `docs/design/plan.md` as a known v1 limitation.
+ * saying what arrived and how big it was. Durable image forwarding is a known v1
+ * limitation (`docs/design.md` §7).
  *
  * @param block - One raw content block from the server.
  * @returns The projected block.

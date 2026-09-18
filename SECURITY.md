@@ -137,7 +137,7 @@ The consequence is concrete: pattern evaluation is synchronous inside the tool
 call (`src/search-ranking.ts` `regexToolMatches`, called from `src/registry.ts`),
 so an accepted-but-pathological pattern blocks the event loop and stalls the
 session — this was measured at roughly 2 seconds for one 28-character input
-before the guard existed (`docs/design/parity-pi-mcp-adapter.md` §5.3). Rejected
+before the guard existed (`docs/parity-pi-mcp-adapter.md` §5.3). Rejected
 patterns are returned as values with the reason shown to the model, not thrown.
 
 ### Spilled output files

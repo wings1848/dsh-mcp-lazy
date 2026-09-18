@@ -27,7 +27,7 @@ If `pnpm test` fails with an error about `@deepseek-ai/dsh-tools`, see
 | `pnpm run typecheck` | Type-check `src/` without emitting |
 | `pnpm run test:types` | Type-check `src/` and `test/` together |
 | `pnpm test` | Build, relink the peers, then `node --test` over `test/unit/*.test.ts` |
-| `pnpm run check` | `typecheck`, then `build`, then `test:types` — what CI runs before the tests |
+| `pnpm run check` | `typecheck`, then `lint`, then `build`, then `test:types` — what CI runs before the tests |
 | `pnpm run link-dsh` | Symlink the `@deepseek-ai/*` peers from the running DSH install |
 | `pnpm run measure:surface` | Print the constant model-facing cost in bytes and parameters |
 | `pnpm run measure:savings` | Compare native registration against the gateway |
@@ -161,7 +161,7 @@ test/
   unit/*.test.ts      executed directly by Node; see below
   fixtures/mcp-server.mjs   a real MCP server, spawned as a child process
 scripts/              link-dsh and the two measurement tools
-docs/                 configuration, troubleshooting, this file, and docs/design/
+docs/                 configuration, troubleshooting, this file, and the design notes
 ```
 
 Two conventions are easy to get wrong:

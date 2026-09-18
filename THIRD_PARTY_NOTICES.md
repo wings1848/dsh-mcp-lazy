@@ -26,7 +26,7 @@ Licensed under the MIT License.
 
 The single-proxy-tool gateway, the persistent metadata cache, the four-mode server lifecycle,
 the weighted search ranking, the output ceiling, and the failure backoff in `src/` are derived
-from this project (<https://github.com/nicobailon/pi-mcp-adapter>). `docs/design/parity-pi-mcp-adapter.md`
+from this project (<https://github.com/nicobailon/pi-mcp-adapter>). `docs/parity-pi-mcp-adapter.md`
 records a module-by-module audit against v2.33.0, including the places where this plugin
 deliberately differs.
 

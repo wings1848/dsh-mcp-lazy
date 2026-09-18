@@ -167,10 +167,8 @@ for what it accepts, and why the default is the cheap choice.
 | [docs/configuration.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/configuration.md) | every field, the four lifecycle modes, output ceiling |
 | [docs/troubleshooting.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/troubleshooting.md) | failed servers, cold cache, name resolution |
 | [docs/development.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/development.md) | build, test, why `link-dsh` is mandatory |
-| [docs/design/plan.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/plan.md) | implementation plan and acceptance criteria |
-| [docs/design/adopt-native-rows.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/adopt-native-rows.md) | the `adopt` command: design, invariants, acceptance criteria, and what implementing it turned up |
-| [docs/design/mcp-adopt-command.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/mcp-adopt-command.md) | the `/mcp-adopt` slash command, and the adversarial review that changed it |
-| [docs/design/parity-pi-mcp-adapter.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design/parity-pi-mcp-adapter.md) | module-by-module audit against `pi-mcp-adapter` v2.33.0 |
+| [docs/design.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/design.md) | why the plugin is shaped this way: the constant tool surface, the cache, the lifecycle, `envFrom`, and the `adopt` command |
+| [docs/parity-pi-mcp-adapter.md](https://github.com/wings1848/dsh-mcp-lazy/blob/main/docs/parity-pi-mcp-adapter.md) | module-by-module comparison against `pi-mcp-adapter` v2.33.0, and the defects it turned up |
 
 ## Known limitations
 
@@ -199,7 +197,7 @@ The v1 boundary, stated plainly:
 
 ```bash
 pnpm install
-pnpm test          # builds, relinks the peer packages, runs 354 tests
+pnpm test          # builds, relinks the peer packages, runs 388 tests
 pnpm run check     # typecheck, lint, build, then type-check the test sources
 ```
 
