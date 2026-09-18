@@ -344,7 +344,7 @@ describe('configuration validation at load time', () => {
   })
 })
 
-describe('AC1 — activation is silent', () => {
+describe('activation is silent', () => {
   it('performs no I/O, so it works with PATH replaced by a spawn trap', async () => {
     const originalPath = process.env['PATH']
     process.env['PATH'] = '/nonexistent'
@@ -371,7 +371,7 @@ describe('AC1 — activation is silent', () => {
   })
 })
 
-describe('AC16 — the plugin unloads cleanly', () => {
+describe('the plugin unloads cleanly', () => {
   it('releases its tool and stops its connections on scope teardown', async () => {
     const { entry, counterFile } = (() => {
       const counter = join(process.env['DSH_HOME']!, 'unload.starts')

@@ -134,7 +134,7 @@ after(() => {
   else process.env['PATH'] = originalPath
 })
 
-describe('AC2 — the model-facing surface is a constant', () => {
+describe('the model-facing surface is a constant', () => {
   it('registers exactly one tool, under the constant name', () => {
     const tool = createProxyTool(new McpGatewayRegistry(config([entry()])))
     assert.equal(tool.name, PROXY_TOOL_NAME)
@@ -174,7 +174,7 @@ describe('AC2 — the model-facing surface is a constant', () => {
   })
 })
 
-describe('AC3 — search answers from cache with no connection', () => {
+describe('search answers from cache with no connection', () => {
   it('finds tools without spawning anything', async () => {
     const registry = new McpGatewayRegistry(config([entry()]))
     const text = await run({ search: 'screenshot' }, registry)
@@ -256,7 +256,7 @@ describe('AC3 — search answers from cache with no connection', () => {
   })
 })
 
-describe('AC5/AC8 — describe and deterministic error surfaces', () => {
+describe('describe and deterministic error surfaces', () => {
   it('describes a tool with its full input schema', async () => {
     const registry = registryWith(entry({ serverName: 'desc' }))
     const text = await run({ describe: 'take_screenshot' }, registry)
@@ -850,7 +850,7 @@ describe('configuration resolution', () => {
   })
 })
 
-describe('AC18 — the spawn trap is real', () => {
+describe('the spawn trap is real', () => {
   it('cannot start a child process through the PATH used by these tests', () => {
     assert.throws(() => execFileSync('demo-server', { stdio: 'pipe' }))
   })

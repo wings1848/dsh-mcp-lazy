@@ -184,7 +184,7 @@ function settle(): Promise<void> {
 // Registration, against a real cordis context
 // ---------------------------------------------------------------------------
 
-describe('the gateway never waits for the command registry (AD16, C2)', () => {
+describe('the gateway never waits for the command registry', () => {
   it('registers the tool with no registry, then the command when it appears', async () => {
     const ctx = new Context()
     const tools: string[] = []
@@ -256,7 +256,7 @@ describe('the gateway never waits for the command registry (AD16, C2)', () => {
 // The input grammar
 // ---------------------------------------------------------------------------
 
-describe('the input grammar refuses to guess (AD17, AD18, AD19)', () => {
+describe('the input grammar refuses to guess', () => {
   it('treats no input as a dry run, and never passes --write', async () => {
     const runner = scriptedRun(OK)
     const { definition } = command({ run: runner.run })
@@ -302,7 +302,7 @@ describe('the input grammar refuses to guess (AD17, AD18, AD19)', () => {
 // Cancellation and evidence
 // ---------------------------------------------------------------------------
 
-describe('cancellation and evidence (AD31, AD32)', () => {
+describe('cancellation and evidence', () => {
   it('forwards the cancellation signal to a dry run', async () => {
     const runner = scriptedRun(OK)
     const { definition } = command({ run: runner.run })
@@ -370,7 +370,7 @@ describe('cancellation and evidence (AD31, AD32)', () => {
 // Exit-code translation
 // ---------------------------------------------------------------------------
 
-describe('exit codes are translated rather than passed through (AD20, AD21, AD22)', () => {
+describe('exit codes are translated rather than passed through', () => {
   it('reports success and the CLI text verbatim on exit 0', async () => {
     const stdout = 'adopt   codegraph\n\nDry run. Nothing was written.\n'
     const { definition } = command({ run: scriptedRun({ status: 0, stdout, stderr: '' }).run })
@@ -421,7 +421,7 @@ describe('exit codes are translated rather than passed through (AD20, AD21, AD22
 // Failure containment
 // ---------------------------------------------------------------------------
 
-describe('no failure escapes the handler (AD23, AD24, AD33)', () => {
+describe('no failure escapes the handler', () => {
   it('reports a runner that throws instead of rejecting', async () => {
     const { definition } = command({
       run: scriptedRun(Object.assign(new Error('spawn EACCES'), { code: 'EACCES' })).run,
@@ -533,7 +533,7 @@ const PROFILE = [
   '',
 ].join('\n')
 
-describe('the default runner reaches the real shipped script (AD26, AD27, AD34)', () => {
+describe('the default runner reaches the real shipped script', () => {
   let sandbox = ''
   let homePatch = ''
   let profilePatch = ''
@@ -665,7 +665,7 @@ describe('the default runner reaches the real shipped script (AD26, AD27, AD34)'
     assert.match(text, /Confirmed by re-planning: 0 server\(s\) to move/)
   })
 
-  it('warns when the disabled row would take the server from other profiles (AD34)', async () => {
+  it('warns when the disabled row would take the server from other profiles', async () => {
     reset()
     // A second profile that reads the same home layer but does not mount this
     // plugin: it would lose codegraph outright, and nothing else would say so.

@@ -163,7 +163,7 @@ async function call(
 }
 
 describe('M2 — lazy startup', () => {
-  it('AC1: spawns nothing until a tool is actually called', async () => {
+  it('spawns nothing until a tool is actually called', async () => {
     const { entry, counterFile, pidFile } = fixtureServer('lazy')
     const { registry, connections } = gateway([entry], () => 600_000)
 
@@ -187,7 +187,7 @@ describe('M2 — lazy startup', () => {
     await registry.dispose()
   })
 
-  it('AC4: reuses one process for repeated calls', async () => {
+  it('reuses one process for repeated calls', async () => {
     const { entry, counterFile, pidFile } = fixtureServer('reuse')
     const { registry } = gateway([entry], () => 600_000)
 
@@ -365,7 +365,7 @@ describe('M2 — cancellation and failure', () => {
     await registry.dispose()
   })
 
-  it('AC16: kills the child when the catalog fetch fails after the handshake', async () => {
+  it('kills the child when the catalog fetch fails after the handshake', async () => {
     // The window that matters: the server is up and `initialize` succeeded, so
     // the SDK considers the connection established. Then `tools/list` fails.
     // Nothing else in this suite covers it — FIXTURE_FAIL exits before the
@@ -394,7 +394,7 @@ describe('M2 — cancellation and failure', () => {
 })
 
 describe('M2 — idle reaping', () => {
-  it('AC6: reaps an idle server and re-spawns it on the next call', async () => {
+  it('reaps an idle server and re-spawns it on the next call', async () => {
     const { entry, counterFile, pidFile } = fixtureServer('reap')
     let clock = Date.now()
     const connections = new LazyConnections(() => 1000, { startSweeper: false, now: () => clock })
@@ -419,7 +419,7 @@ describe('M2 — idle reaping', () => {
     await registry.dispose()
   })
 
-  it('AC7: never reaps a call that is still in flight', async () => {
+  it('never reaps a call that is still in flight', async () => {
     const { entry, counterFile } = fixtureServer('inflight')
     let clock = Date.now()
     const connections = new LazyConnections(() => 1000, { startSweeper: false, now: () => clock })
@@ -568,7 +568,7 @@ describe('M2 — cold-start discovery', () => {
   })
 })
 
-describe('AC18 — stdio environment boundaries', () => {
+describe('stdio environment boundaries', () => {
   it('drops credential-shaped and DSH_* names while keeping explicit overrides', async () => {
     process.env['MY_SERVICE_TOKEN'] = 'leaked-token'
     process.env['DB_PASSWORD'] = 'leaked-password'
@@ -608,7 +608,7 @@ describe('AC18 — stdio environment boundaries', () => {
   })
 })
 
-describe('AC5 — live tool-list refresh', () => {
+describe('live tool-list refresh', () => {
   it('picks up a tool the server adds mid-session, without changing the tool surface', async () => {
     const { entry } = fixtureServer('refresh')
     const { registry } = gateway([entry], () => 600_000)
@@ -978,7 +978,7 @@ describe('M9 — activation connects only what asked to be resident', () => {
     }
   })
 
-  it('starts the adopted server and never the row it was moved out of (AD7)', async () => {
+  it('starts the adopted server and never the row it was moved out of', async () => {
     // The end state this whole feature produces, asserted as a pair of process
     // counts. Two plugins would both answer for `same-server`; after the move,
     // the row that used to serve it carries `disabled: true` and the server is

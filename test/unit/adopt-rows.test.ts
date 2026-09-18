@@ -470,7 +470,7 @@ describe('findServersList', () => {
     assert.equal(list.lineEnding, '\r\n')
   })
 
-  it('writes a CRLF file with CRLF throughout (B6)', () => {
+  it('writes a CRLF file with CRLF throughout', () => {
     // An edit that only meant to add one entry must not leave a file with mixed
     // endings: the diff then shows every line, and the next tool to read it has
     // to guess which convention won.
@@ -843,7 +843,7 @@ describe('planAdoption — idempotence', () => {
   })
 })
 
-describe('planAdoption — byte-level edits (I3, AD4)', () => {
+describe('planAdoption — byte-level edits (I3)', () => {
   it('rewrites the file as the original with exactly those ranges replaced', () => {
     // The invariant, stated as arithmetic rather than as a promise: applying the
     // edit script to the original must give the new file, so every byte outside

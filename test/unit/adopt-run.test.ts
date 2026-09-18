@@ -195,7 +195,7 @@ after(() => {
   // `tempDir` removes the directory when the process exits.
 })
 
-describe('adopt.mjs — dry run (AD1)', () => {
+describe('adopt.mjs — dry run', () => {
   it('writes nothing, and says what it would do', () => {
     resetFixtures()
     const before = { home: digest(homePatch), profile: digest(profilePatch) }
@@ -244,7 +244,7 @@ describe('adopt.mjs — dry run (AD1)', () => {
   })
 })
 
-describe('adopt.mjs — --write (AD2, AD3, AD9)', () => {
+describe('adopt.mjs — --write', () => {
   it('writes both files, and backs each one up first', () => {
     resetFixtures()
     const result = adopt(['--dsh-home', sandbox, '--write'], { composed: true })
@@ -314,7 +314,7 @@ describe('adopt.mjs — --write (AD2, AD3, AD9)', () => {
   })
 })
 
-describe('adopt.mjs — error paths (AD11, AD15)', () => {
+describe('adopt.mjs — error paths', () => {
   it('exits 2 and writes nothing when the file does not exist', () => {
     resetFixtures()
     const before = digest(homePatch)
@@ -325,7 +325,7 @@ describe('adopt.mjs — error paths (AD11, AD15)', () => {
     assert.deepEqual(backups(), [])
   })
 
-  it('records the digest of every file it is about to write (AD15)', () => {
+  it('records the digest of every file it is about to write', () => {
     // The concurrency guard is a comparison against a digest taken when the plan
     // was built, so the digest has to be in the plan for the guard to mean
     // anything. This asserts the value reported is the file's real digest — that
@@ -382,7 +382,7 @@ describe('adopt.mjs — error paths (AD11, AD15)', () => {
     }
   })
 
-  it('leaves every file alone when the second one cannot be written (AD11, B4)', () => {
+  it('leaves every file alone when the second one cannot be written', () => {
     // The failure that matters is not "the write failed" but "the write failed
     // *halfway*". A disable applied to one file without the matching append in
     // the other removes a server from both plugins: it is neither configured
@@ -438,7 +438,7 @@ describe('adopt.mjs — error paths (AD11, AD15)', () => {
     assert.match(result.stdout, /--allow-skip/)
   })
 
-  it('runs when invoked through a symlink, the way a `bin` entry is (AD10)', () => {
+  it('runs when invoked through a symlink, the way a `bin` entry is', () => {
     // `npm install` and `pnpm add` expose `bin` as a *symlink* on POSIX, so
     // `argv[1]` is the link and `import.meta.url` is the real file. Comparing the
     // two without resolving symlinks makes the entry point undetectable: the CLI

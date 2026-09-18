@@ -1,5 +1,5 @@
 /**
- * AC2b: native-tool promotion.
+ * native-tool promotion.
  *
  * The gateway's default surface is one tool. These tests pin what happens when
  * configuration asks for something else:
@@ -154,7 +154,7 @@ async function bothPaths(result: ToolCallResult): Promise<{ proxy: string; nativ
   return { proxy: viaProxy, native: viaNative }
 }
 
-describe('AC2b — directTools: off by default', () => {
+describe('directTools: off by default', () => {
   it('promotes nothing when no server asks for it', async () => {
     const registry = await loadedRegistry(twoServers(), CATALOGS)
     const { registrar, registered } = registrarFor(registry)
@@ -165,7 +165,7 @@ describe('AC2b — directTools: off by default', () => {
   })
 })
 
-describe('AC2b — directTools: true / string[]', () => {
+describe('directTools: true / string[]', () => {
   it('promotes every tool of a server configured with true', async () => {
     const entries = twoServers()
     entries[0]!.directTools = true
@@ -243,7 +243,7 @@ describe('AC2b — directTools: true / string[]', () => {
   })
 })
 
-describe("AC2b — directTools: 'search'", () => {
+describe("directTools: 'search'", () => {
   it('promotes nothing until a search matches', async () => {
     const entries = twoServers()
     entries[0]!.directTools = 'search'
@@ -303,7 +303,7 @@ describe("AC2b — directTools: 'search'", () => {
   })
 })
 
-describe('AC2b — plugin-level directTools default', () => {
+describe('plugin-level directTools default', () => {
   it('promotes every server when the plugin default is true', async () => {
     // pi-mcp-adapter exposes this as `settings.directTools`, so a configuration
     // carried over from it expects to find one.
@@ -351,7 +351,7 @@ describe('AC2b — plugin-level directTools default', () => {
   })
 })
 
-describe('AC2b — freezeDirectTools', () => {
+describe('freezeDirectTools', () => {
   it('stops accepting new promotions after the first pass', async () => {
     const entries = twoServers()
     entries[0]!.directTools = true
@@ -378,7 +378,7 @@ describe('AC2b — freezeDirectTools', () => {
   })
 })
 
-describe('AC2b — promotion never breaks the proxy', () => {
+describe('promotion never breaks the proxy', () => {
   it('survives a registration that throws', async () => {
     const entries = twoServers()
     entries[0]!.directTools = true

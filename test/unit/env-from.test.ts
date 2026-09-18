@@ -176,7 +176,7 @@ function fakeContext(): { ctx: unknown; registered: ToolDefinition[] } {
 }
 
 describe('envFrom — the value reaches the child', () => {
-  it('AC1: resolves the command and injects its trimmed stdout', async () => {
+  it('resolves the command and injects its trimmed stdout', async () => {
     const entry = fixtureServer('resolved', {
       envFrom: { PROBE: 'printf "real-value\\n"' },
     })
@@ -187,7 +187,7 @@ describe('envFrom — the value reaches the child', () => {
     await registry.dispose()
   })
 
-  it('AC1b: runs the command through a shell, so pipes work', async () => {
+  it('runs the command through a shell, so pipes work', async () => {
     const entry = fixtureServer('piped', {
       envFrom: { PROBE: 'printf "a-b-c" | tr "-" "_"' },
     })
@@ -198,7 +198,7 @@ describe('envFrom — the value reaches the child', () => {
     await registry.dispose()
   })
 
-  it('AC11: the command does not inherit the host credential-shaped environment', async () => {
+  it('the command does not inherit the host credential-shaped environment', async () => {
     process.env['MY_SERVICE_TOKEN'] = 'leaked-token'
     const entry = fixtureServer('scrubbed', {
       envFrom: { PROBE: 'printf "%s" "${MY_SERVICE_TOKEN:-none}"' },
@@ -211,7 +211,7 @@ describe('envFrom — the value reaches the child', () => {
     await registry.dispose()
   })
 
-  it('AC12: the command does not inherit the entry\'s own env block', async () => {
+  it('the command does not inherit the entry\'s own env block', async () => {
     const entry = fixtureServer('no-env-bleed', {
       env: { FIXTURE_MARKER: 'entry-only' },
       envFrom: { PROBE: 'printf "%s" "${FIXTURE_MARKER:-none}"' },
@@ -223,7 +223,7 @@ describe('envFrom — the value reaches the child', () => {
     await registry.dispose()
   })
 
-  it('AC4b: several variables resolve together', async () => {
+  it('several variables resolve together', async () => {
     const entry = fixtureServer('multi', {
       envFrom: { PROBE_ONE: 'printf one', PROBE_TWO: 'printf two' },
     })
@@ -237,7 +237,7 @@ describe('envFrom — the value reaches the child', () => {
 })
 
 describe('envFrom — args interpolation', () => {
-  it('AC5: replaces {{NAME}} in args with the resolved value', async () => {
+  it('replaces {{NAME}} in args with the resolved value', async () => {
     const entry = fixtureServer('argv', {
       args: [FIXTURE, '--header=Bearer {{PROBE}}'],
       envFrom: { PROBE: 'printf tok-123' },
@@ -249,7 +249,7 @@ describe('envFrom — args interpolation', () => {
     await registry.dispose()
   })
 
-  it('AC5b: leaves an undeclared placeholder exactly as written', async () => {
+  it('leaves an undeclared placeholder exactly as written', async () => {
     const entry = fixtureServer('argv-undeclared', {
       args: [FIXTURE, '--json={"a":"{{NOT_DECLARED}}"}'],
       envFrom: { PROBE: 'printf tok-123' },
@@ -261,7 +261,7 @@ describe('envFrom — args interpolation', () => {
     await registry.dispose()
   })
 
-  it('AC5c: substitutes a declared name that is not a POSIX identifier', async () => {
+  it('substitutes a declared name that is not a POSIX identifier', async () => {
     // `envFrom` keys are arbitrary strings as far as the schema goes, so a
     // placeholder that only matched identifiers would silently do nothing for
     // a declared name like this one.
@@ -278,7 +278,7 @@ describe('envFrom — args interpolation', () => {
 })
 
 describe('envFrom — failure is never a silent empty value', () => {
-  it('AC2: a non-zero exit fails the start, naming the variable and the code', async () => {
+  it('a non-zero exit fails the start, naming the variable and the code', async () => {
     const entry = fixtureServer('exit-code', {
       envFrom: { PROBE: 'echo boom >&2; exit 3' },
     })
@@ -296,7 +296,7 @@ describe('envFrom — failure is never a silent empty value', () => {
     )
   })
 
-  it('AC2b: the failure text carries stderr but never stdout', async () => {
+  it('the failure text carries stderr but never stdout', async () => {
     const entry = fixtureServer('no-stdout-leak', {
       envFrom: { PROBE: `printf ${SENTINEL}; echo boom >&2; exit 4` },
     })
@@ -312,7 +312,7 @@ describe('envFrom — failure is never a silent empty value', () => {
     )
   })
 
-  it('AC3: a timeout fails within its budget and leaves no process behind', async () => {
+  it('a timeout fails within its budget and leaves no process behind', async () => {
     const pidFile = join(workdir, 'timeout.pid')
     const entry = fixtureServer('timeout', {
       envFrom: { PROBE: `echo $$ > ${pidFile}; sleep 60` },
@@ -337,7 +337,7 @@ describe('envFrom — failure is never a silent empty value', () => {
     assert.equal(await processExits(pid), true, `pid ${pid} survived the timeout`)
   })
 
-  it('AC4: empty output fails, and allowEmpty is the only way past it', async () => {
+  it('empty output fails, and allowEmpty is the only way past it', async () => {
     const failing = fixtureServer('empty', { envFrom: { PROBE: 'printf ""' } })
     const first = gateway([failing])
     await assert.rejects(
@@ -360,7 +360,7 @@ describe('envFrom — failure is never a silent empty value', () => {
     await registry.dispose()
   })
 
-  it('AC2c: stderr is capped even when one chunk carries far more than the cap', async () => {
+  it('stderr is capped even when one chunk carries far more than the cap', async () => {
     // 300 KB in a single write. The cap has to be applied to what is kept, not
     // decided from the length *before* appending: a 64 KiB pipe chunk then
     // walks straight past a 2 KB limit.
@@ -383,7 +383,7 @@ describe('envFrom — failure is never a silent empty value', () => {
     )
   })
 
-  it('AC2d: a value carrying a NUL byte is refused before spawn can quote it', async () => {
+  it('a value carrying a NUL byte is refused before spawn can quote it', async () => {
     const entry = fixtureServer('nul-byte', {
       envFrom: { PROBE: `printf 'LEAKME-1234\\000suffix'` },
     })
@@ -404,7 +404,7 @@ describe('envFrom — failure is never a silent empty value', () => {
     assert.ok(!status.includes('LEAKME-1234'), 'the value leaked into registry status')
   })
 
-  it('AC2e: stdout past the cap fails instead of silently truncating a secret', async () => {
+  it('stdout past the cap fails instead of silently truncating a secret', async () => {
     const entry = fixtureServer('big-stdout', {
       envFrom: { PROBE: "head -c 200000 /dev/zero | tr '\\0' 'y'" },
     })
@@ -421,7 +421,7 @@ describe('envFrom — failure is never a silent empty value', () => {
     )
   })
 
-  it('AC3b: a command that ignores SIGTERM is still killed, with nothing left behind', async () => {
+  it('a command that ignores SIGTERM is still killed, with nothing left behind', async () => {
     const pidFile = join(workdir, 'stubborn.pid')
     // A *fresh shell* backgrounds the stubborn member, so `$$` is that member's
     // own pid rather than the leader's — which is what makes "did it survive"
@@ -445,7 +445,7 @@ describe('envFrom — failure is never a silent empty value', () => {
     assert.equal(await processExits(pid, 6000), true, `pid ${pid} survived the timeout`)
   })
 
-  it('AC3c: a command whose leader finished is not reported as a timeout', async () => {
+  it('a command whose leader finished is not reported as a timeout', async () => {
     // The background child inherits the pipes on purpose: `close` then waits for
     // EOF, so the budget expires while the leader is long gone with exit code 0.
     const entry = fixtureServer('bg-holds-pipe', {
@@ -461,7 +461,7 @@ describe('envFrom — failure is never a silent empty value', () => {
 })
 
 describe('envFrom — load-time validation', () => {
-  it('AC6: a name in both env and envFrom is refused at load', () => {
+  it('a name in both env and envFrom is refused at load', () => {
     const { ctx } = fakeContext()
     assert.throws(
       () =>
@@ -484,7 +484,7 @@ describe('envFrom — load-time validation', () => {
     )
   })
 
-  it('AC6b: envFrom on a non-stdio transport is refused at load', () => {
+  it('envFrom on a non-stdio transport is refused at load', () => {
     const { ctx } = fakeContext()
     assert.throws(
       () =>
@@ -506,7 +506,7 @@ describe('envFrom — load-time validation', () => {
     )
   })
 
-  it('AC6c: allowEmpty naming an undeclared variable is refused at load', () => {
+  it('allowEmpty naming an undeclared variable is refused at load', () => {
     const { ctx } = fakeContext()
     assert.throws(
       () =>
@@ -529,7 +529,7 @@ describe('envFrom — load-time validation', () => {
     )
   })
 
-  it('AC6d: an empty command is refused at load', () => {
+  it('an empty command is refused at load', () => {
     const { ctx } = fakeContext()
     assert.throws(
       () =>
@@ -553,7 +553,7 @@ describe('envFrom — load-time validation', () => {
 })
 
 describe('envFrom — the value goes nowhere else', () => {
-  it('AC7: no file under the DSH home contains the resolved value', async () => {
+  it('no file under the DSH home contains the resolved value', async () => {
     const entry = fixtureServer('no-disk', {
       envFrom: { PROBE: `printf ${SENTINEL}` },
     })
@@ -568,7 +568,7 @@ describe('envFrom — the value goes nowhere else', () => {
     await registry.dispose()
   })
 
-  it('AC8: the resolved value never enters the host process environment', async () => {
+  it('the resolved value never enters the host process environment', async () => {
     const entry = fixtureServer('no-host-env', {
       envFrom: { PROBE: `printf ${SENTINEL}` },
     })
@@ -582,7 +582,7 @@ describe('envFrom — the value goes nowhere else', () => {
 })
 
 describe('envFrom — metadata cache hashing', () => {
-  it('AC9: an entry without envFrom hashes as if the field did not exist', () => {
+  it('an entry without envFrom hashes as if the field did not exist', () => {
     const base: ServerEntry = {
       serverName: 'hash',
       transport: 'stdio',
@@ -597,7 +597,7 @@ describe('envFrom — metadata cache hashing', () => {
     )
   })
 
-  it('AC9b: the digest of an entry without envFrom is pinned to its pre-change value', () => {
+  it('the digest of an entry without envFrom is pinned to its pre-change value', () => {
     // The value a build of 0.3.3 produced for this exact entry. `envFrom` must
     // not perturb the hash inputs at all when nothing is declared — schemastery
     // defaults it to `{}` on every entry, so getting this wrong would throw
@@ -617,7 +617,7 @@ describe('envFrom — metadata cache hashing', () => {
     )
   })
 
-  it('AC10: a configured command changes the hash', () => {
+  it('a configured command changes the hash', () => {
     const base: ServerEntry = { serverName: 'hash2', transport: 'stdio', command: 'node' }
     assert.notEqual(
       computeConfigHash({ ...base, envFrom: { PROBE: 'printf a' } }),

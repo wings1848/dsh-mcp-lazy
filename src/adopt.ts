@@ -108,7 +108,8 @@ export interface AdoptPlan {
    *
    * Applying these ranges (descending by `start`) to the original files produces
    * the rewritten files exactly. That makes the "every other byte is untouched"
-   * claim checkable rather than asserted, and it is what the AD4 test does.
+   * claim checkable rather than asserted, and it is what the byte-level edit test
+   * does.
    *
    * The claim holds *byte* for byte even though the offsets are character
    * indices, because a range is cut on the characters it names: everything
@@ -555,7 +556,7 @@ function planServerAppends(
 /**
  * Translate one `dsh-mcp-client` row into an entry this plugin can load.
  *
- * The two plugins' server fields are synonyms (F6), so a row moves across with
+ * The two plugins' server fields are synonyms, so a row moves across with
  * no translation. Two exceptions are handled rather than passed through:
  *
  * - `cwd` defaults to the empty string on the other side, and `cwd: ''` means
