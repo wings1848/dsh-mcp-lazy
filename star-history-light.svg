@@ -13,10 +13,10 @@
   <text x="42" y="97.0" text-anchor="end" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#656d76">3</text>
   <line x1="52" y1="44.0" x2="832" y2="44.0" stroke="#eaeef2"/>
   <text x="42" y="48.0" text-anchor="end" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#656d76">4</text>
-  <path d="M 52.0,240.0 L 52.0,240.0 L 100.8,44.0 L 149.5,44.0 L 198.3,44.0 L 247.0,44.0 L 295.8,44.0 L 344.5,44.0 L 393.3,44.0 L 442.0,44.0 L 490.8,44.0 L 539.5,44.0 L 588.3,44.0 L 637.0,44.0 L 685.8,44.0 L 734.5,44.0 L 783.3,44.0 L 832.0,44.0 L 832.0,240.0 Z" fill="#1a7f37" fill-opacity="0.14"/>
-  <polyline points="52.0,240.0 100.8,44.0 149.5,44.0 198.3,44.0 247.0,44.0 295.8,44.0 344.5,44.0 393.3,44.0 442.0,44.0 490.8,44.0 539.5,44.0 588.3,44.0 637.0,44.0 685.8,44.0 734.5,44.0 783.3,44.0 832.0,44.0" fill="none" stroke="#1a7f37" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M 52.0,240.0 L 52.0,240.0 L 97.9,44.0 L 143.8,44.0 L 189.6,44.0 L 235.5,44.0 L 281.4,44.0 L 327.3,44.0 L 373.2,44.0 L 419.1,44.0 L 464.9,44.0 L 510.8,44.0 L 556.7,44.0 L 602.6,44.0 L 648.5,44.0 L 694.4,44.0 L 740.2,44.0 L 786.1,44.0 L 832.0,44.0 L 832.0,240.0 Z" fill="#1a7f37" fill-opacity="0.14"/>
+  <polyline points="52.0,240.0 97.9,44.0 143.8,44.0 189.6,44.0 235.5,44.0 281.4,44.0 327.3,44.0 373.2,44.0 419.1,44.0 464.9,44.0 510.8,44.0 556.7,44.0 602.6,44.0 648.5,44.0 694.4,44.0 740.2,44.0 786.1,44.0 832.0,44.0" fill="none" stroke="#1a7f37" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
   <circle cx="832.0" cy="44.0" r="5" fill="#ffffff"/>
   <circle cx="832.0" cy="44.0" r="3.5" fill="#1a7f37"/>
   <text x="52" y="268" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#656d76">2026-09-11</text>
-  <text x="832" y="268" text-anchor="end" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#656d76">2026-09-27</text>
+  <text x="832" y="268" text-anchor="end" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#656d76">2026-09-28</text>
 </svg>
