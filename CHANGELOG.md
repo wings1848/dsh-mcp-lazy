@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-03
+
+### Fixed
+
+- **Peer ranges accept the `0.2.0-rc` harness line.** They read `^0.1.5-rc.1`, and semver does
+  not let a prerelease of one `0.x` line satisfy a caret range anchored on another: the
+  harness's `0.2.0-rc.2` fails `^0.1.5-rc.1` outright. Nothing crashed — the damage sat at
+  install time, where a package manager resolves the unmet peer against the registry and
+  materializes a private `0.1.5-rc.x` copy of `dsh-tools` under `node_modules`. The plugin
+  then builds tool definitions with a different `dsh-tools` instance than the runtime that
+  registers them: the class-identity mismatch `scripts/link-dsh.mjs` exists to prevent. The
+  ranges are now `^0.1.5-rc.1 || ^0.2.0-rc.1` in both `peerDependencies` and `devDependencies`,
+  covering the `0.1.5-rc` line and the `0.2.0-rc` line through `0.2.0-rc.2` (`package.json`).
+
+  `test/unit/peer-ranges.test.ts` now guards the claim in both directions: the versions this
+  plugin says it supports must satisfy each range, and so must the version the harness
+  actually provides. A narrowed range turns red on any machine, and a harness that moves past
+  the range turns red again.
+
 ## [0.4.0] - 2026-09-19
 
 ### Added
@@ -632,7 +651,8 @@ fail first — and fixed before this release:
   heavily cannot flood the model's context through an error message
   (`src/connection.ts`).
 
-[Unreleased]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/wings1848/dsh-mcp-lazy/compare/v0.3.1...v0.3.2
