@@ -38,8 +38,8 @@ The plugin imports `@deepseek-ai/cordis`, `@deepseek-ai/dsh-tools`,
 harness supplies those from its own installation. Because they are also
 devDependencies, a package manager will materialize private copies under this
 package's `node_modules` — and a private copy can be a different release than the
-harness you are running (the commit history records `0.1.5-rc.2` from the registry
-against the `0.1.5-rc.1` in the harness). Code that builds tool definitions with a
+harness you are running (the registry copy has been both a release behind and a
+release ahead of the harness). Code that builds tool definitions with a
 different module instance than the runtime that registers them hits a
 class-identity mismatch: either a confusing failure or a silent one-release
 drift.
@@ -59,7 +59,7 @@ All of these come from `package.json` `scripts`.
 | --- | --- |
 | `pnpm build` | `tsc -p tsconfig.json` — compiles `src/` to `lib/` with declarations and source maps. |
 | `pnpm typecheck` | The same project with `--noEmit` — type errors only, no output. |
-| `pnpm test` | `node --test "test/unit/*.test.ts"`. Runs `pretest` first (build, then `link-dsh`). Reports 388 tests in 90 suites; `README.md` carries the same test count in its quick start. |
+| `pnpm test` | `node --test "test/unit/*.test.ts"`. Runs `pretest` first (build, then `link-dsh`). Reports 390 tests in 91 suites; `README.md` carries the same test count in its quick start. |
 | `pnpm test:types` | `tsc -p tsconfig.test.json` — type-checks the test sources as well, which `typecheck` does not cover. |
 | `pnpm check` | `typecheck` then `lint` then `build` then `test:types`, in that order. Run this before opening a pull request; CI runs the same command. |
 | `pnpm lint` | `oxlint src scripts test` (config: `.oxlintrc.json`), then `node scripts/check-style.mjs` for the rules in `.editorconfig` that oxlint does not implement — the 100-column limit, LF endings, trailing whitespace, final newline. |

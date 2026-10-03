@@ -117,9 +117,9 @@ dependencies**. The harness supplies them at plugin load time from its own insta
 If a private copy also exists under this package's `node_modules`, the plugin builds tool
 definitions with a *different* `dsh-tools` instance than the runtime that registers them.
 That is a class-identity mismatch: it fails confusingly, or silently drifts a release behind
-— the registry's `latest` tag currently points at `0.0.1-rc.1` while the harness runs
-`0.1.5-rc.1`, so a naive install gets something quite different from what the plugin was
-built against.
+— the registry's `latest` tag for these packages has pointed at `0.0.1-rc.1` while the
+harness ran a much newer prerelease, so a naive install gets something quite different from
+what the plugin was built against.
 
 `scripts/link-dsh.mjs` closes that gap by symlinking the peers from the running DSH
 installation. It runs automatically as part of `pretest`. It locates the installation from
@@ -141,6 +141,20 @@ excludes the `@deepseek-ai/*` scope from pnpm 12's 24-hour `minimumReleaseAge` r
 without that, a fresh clone cannot install at all, because a harness release is usually
 hours old. Neither of those is what makes a local checkout match the running harness;
 `link-dsh` is, and it runs on every test.
+
+## Which harness versions are supported
+
+The peer ranges for `@deepseek-ai/dsh-tools` and `@deepseek-ai/dsh-subprocess` read
+`^0.1.5-rc.1 || ^0.2.0-rc.1`. The two packages are versioned with the harness, and every
+supported `0.x` line needs its own clause: a prerelease of one line does not satisfy a caret
+range anchored on another, so `0.2.0-rc.2` fails `^0.1.5-rc.1` outright. As of this writing
+the range covers the `0.1.5-rc` line and the `0.2.0-rc` line through `0.2.0-rc.2`; harness
+`alpha` builds are not covered.
+
+`test/unit/peer-ranges.test.ts` holds that claim in both directions: it fails when a range
+narrows below a version this plugin says it supports, and again when the installed harness
+moves past what the range accepts — the mismatch a package manager would paper over by
+installing a second copy at install time.
 
 ## Layout
 

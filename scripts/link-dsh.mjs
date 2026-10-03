@@ -8,8 +8,8 @@
  * private copies under this package's `node_modules`, the plugin would build tool
  * definitions with a *different* `dsh-tools` instance than the runtime that
  * registers them — a class-identity mismatch that fails confusingly, or silently
- * drifts a release behind (`0.1.5-rc.2` on the registry versus the `0.1.5-rc.1`
- * this harness is actually running).
+ * drifts a release behind (the registry copy versus the version this harness is
+ * actually running).
  *
  * So: symlink the peer packages into `node_modules` from the harness install, and
  * let every other dependency resolve normally. Run automatically by `pretest`.

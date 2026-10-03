@@ -49,6 +49,9 @@ node scripts/measure-token-savings.mjs --npx <你的服务器>
 dsh plugin --profile <你的profile> add dsh-mcp-lazy
 ```
 
+兼容 DeepSeek Harness 的 `0.1.5-rc` 与 `0.2.0-rc` 系列（实测到 `0.2.0-rc.2`），包里的 peer
+版本范围就是这份声明。
+
 这条命令会把包装进 profile 并登记它的 bundle patch，后者插入 `mcp-lazy` 这一行。然后在 profile 的
 `cordis.patch.yml` 里填服务器：
 
@@ -173,7 +176,7 @@ mcp({})                                # 状态：工具数 / 连接态 / 缓存
 
 ```bash
 pnpm install
-pnpm test          # 构建 → 重链 peer 包 → 388 个用例
+pnpm test          # 构建 → 重链 peer 包 → 390 个用例
 pnpm run check     # typecheck → lint → build → 再对测试源码做类型检查
 ```
 

@@ -54,6 +54,9 @@ node scripts/measure-token-savings.mjs --npx <your-server>
 dsh plugin --profile <your-profile> add dsh-mcp-lazy
 ```
 
+Works with the DeepSeek Harness `0.1.5-rc` and `0.2.0-rc` lines (verified against
+`0.2.0-rc.2`); the package's peer ranges declare exactly that.
+
 That installs the package into the profile and registers its bundle patch, which inserts the
 `mcp-lazy` row. Then give it your servers in the profile's `cordis.patch.yml`:
 
@@ -197,7 +200,7 @@ The v1 boundary, stated plainly:
 
 ```bash
 pnpm install
-pnpm test          # builds, relinks the peer packages, runs 388 tests
+pnpm test          # builds, relinks the peer packages, runs 390 tests
 pnpm run check     # typecheck, lint, build, then type-check the test sources
 ```
 
