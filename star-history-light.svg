@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 280" width="860" height="280" role="img" aria-label="Star history: 10 stars">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 280" width="860" height="280" role="img" aria-label="Star history: 11 stars">
   <title>Star history</title>
   <rect width="860" height="280" rx="10" fill="#ffffff" stroke="#d0d7de"/>
   <text x="52" y="26" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328">Stars</text>
-  <text x="832" y="26" text-anchor="end" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="20" font-weight="600" fill="#1a7f37">10</text>
+  <text x="832" y="26" text-anchor="end" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="20" font-weight="600" fill="#1a7f37">11</text>
   <line x1="52" y1="240.0" x2="832" y2="240.0" stroke="#eaeef2"/>
   <text x="42" y="244.0" text-anchor="end" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#656d76">0</text>
   <line x1="52" y1="191.0" x2="832" y2="191.0" stroke="#eaeef2"/>
@@ -13,10 +13,10 @@
   <text x="42" y="97.0" text-anchor="end" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#656d76">9</text>
   <line x1="52" y1="44.0" x2="832" y2="44.0" stroke="#eaeef2"/>
   <text x="42" y="48.0" text-anchor="end" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#656d76">12</text>
-  <path d="M 52.0,240.0 L 52.0,240.0 L 71.5,174.7 L 91.0,174.7 L 110.5,174.7 L 130.0,174.7 L 149.5,174.7 L 169.0,174.7 L 188.5,174.7 L 208.0,174.7 L 227.5,174.7 L 247.0,174.7 L 266.5,174.7 L 286.0,174.7 L 305.5,174.7 L 325.0,174.7 L 344.5,174.7 L 364.0,174.7 L 383.5,174.7 L 403.0,174.7 L 422.5,158.3 L 442.0,158.3 L 461.5,158.3 L 481.0,158.3 L 500.5,142.0 L 520.0,142.0 L 539.5,142.0 L 559.0,142.0 L 578.5,142.0 L 598.0,142.0 L 617.5,142.0 L 637.0,142.0 L 656.5,142.0 L 676.0,109.3 L 695.5,109.3 L 715.0,109.3 L 734.5,109.3 L 754.0,109.3 L 773.5,109.3 L 793.0,109.3 L 812.5,76.7 L 832.0,76.7 L 832.0,240.0 Z" fill="#1a7f37" fill-opacity="0.14"/>
-  <polyline points="52.0,240.0 71.5,174.7 91.0,174.7 110.5,174.7 130.0,174.7 149.5,174.7 169.0,174.7 188.5,174.7 208.0,174.7 227.5,174.7 247.0,174.7 266.5,174.7 286.0,174.7 305.5,174.7 325.0,174.7 344.5,174.7 364.0,174.7 383.5,174.7 403.0,174.7 422.5,158.3 442.0,158.3 461.5,158.3 481.0,158.3 500.5,142.0 520.0,142.0 539.5,142.0 559.0,142.0 578.5,142.0 598.0,142.0 617.5,142.0 637.0,142.0 656.5,142.0 676.0,109.3 695.5,109.3 715.0,109.3 734.5,109.3 754.0,109.3 773.5,109.3 793.0,109.3 812.5,76.7 832.0,76.7" fill="none" stroke="#1a7f37" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-  <circle cx="832.0" cy="76.7" r="5" fill="#ffffff"/>
-  <circle cx="832.0" cy="76.7" r="3.5" fill="#1a7f37"/>
+  <path d="M 52.0,240.0 L 52.0,240.0 L 71.0,174.7 L 90.0,174.7 L 109.1,174.7 L 128.1,174.7 L 147.1,174.7 L 166.1,174.7 L 185.2,174.7 L 204.2,174.7 L 223.2,174.7 L 242.2,174.7 L 261.3,174.7 L 280.3,174.7 L 299.3,174.7 L 318.3,174.7 L 337.4,174.7 L 356.4,174.7 L 375.4,174.7 L 394.4,174.7 L 413.5,158.3 L 432.5,158.3 L 451.5,158.3 L 470.5,158.3 L 489.6,142.0 L 508.6,142.0 L 527.6,142.0 L 546.6,142.0 L 565.7,142.0 L 584.7,142.0 L 603.7,142.0 L 622.7,142.0 L 641.8,142.0 L 660.8,109.3 L 679.8,109.3 L 698.8,109.3 L 717.9,109.3 L 736.9,109.3 L 755.9,109.3 L 774.9,109.3 L 794.0,76.7 L 813.0,76.7 L 832.0,60.3 L 832.0,240.0 Z" fill="#1a7f37" fill-opacity="0.14"/>
+  <polyline points="52.0,240.0 71.0,174.7 90.0,174.7 109.1,174.7 128.1,174.7 147.1,174.7 166.1,174.7 185.2,174.7 204.2,174.7 223.2,174.7 242.2,174.7 261.3,174.7 280.3,174.7 299.3,174.7 318.3,174.7 337.4,174.7 356.4,174.7 375.4,174.7 394.4,174.7 413.5,158.3 432.5,158.3 451.5,158.3 470.5,158.3 489.6,142.0 508.6,142.0 527.6,142.0 546.6,142.0 565.7,142.0 584.7,142.0 603.7,142.0 622.7,142.0 641.8,142.0 660.8,109.3 679.8,109.3 698.8,109.3 717.9,109.3 736.9,109.3 755.9,109.3 774.9,109.3 794.0,76.7 813.0,76.7 832.0,60.3" fill="none" stroke="#1a7f37" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="832.0" cy="60.3" r="5" fill="#ffffff"/>
+  <circle cx="832.0" cy="60.3" r="3.5" fill="#1a7f37"/>
   <text x="52" y="268" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#656d76">2026-09-11</text>
-  <text x="832" y="268" text-anchor="end" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#656d76">2026-10-21</text>
+  <text x="832" y="268" text-anchor="end" font-family="ui-sans-serif,-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#656d76">2026-10-22</text>
 </svg>
